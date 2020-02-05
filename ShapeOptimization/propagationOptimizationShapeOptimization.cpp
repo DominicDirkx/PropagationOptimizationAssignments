@@ -88,7 +88,7 @@ std::shared_ptr< PropagationTerminationSettings > getPropagationTerminationSetti
  *
  * The code, as provided, runs the following:
  *      if j=0,1,2,3: a variable-step-size, multi-stage integrator is used (see multiStageTypes list for specific type),
- *                    with tolerances 10^(10-2*k)
+ *                    with tolerances 10^(10-k)
  *      if j=4      : a fixed-step-size RK4 integrator is used, with step-size 10 * 2^(k)
  *
  * CODING NOTE: THIS FUNCTION SHOULD BE EXTENDED TO USE MORE INTEGRATORS FOR ASSIGNMENT 1
@@ -114,7 +114,7 @@ std::shared_ptr< IntegratorSettings< > > getIntegratorSettings(
     {
         // Extract integrator type and tolerance for current run
         RungeKuttaCoefficients::CoefficientSets currentCoefficientSet = multiStageTypes.at( j );
-        double currentTolerance = std::pow( 10.0, ( -10.0 + static_cast< double >( 2*k ) ) );
+        double currentTolerance = std::pow( 10.0, ( -10.0 + static_cast< double >( k ) ) );
 
         // Create integrator settings
         return std::make_shared< RungeKuttaVariableStepSizeSettings< > >(
@@ -179,7 +179,7 @@ std::shared_ptr< DependentVariableSaveSettings > getDependentVariableSaveSetting
  * \return Interpolators providing values for state and dependent variables of the benchmark run
  */
 std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorXd > > > generateBenchmarks(
-        double simulationStartEpoch, simulation_setup::NamedBodyMap bodyMap,
+        double simulationStartEpoch, const double vehicleDensity, simulation_setup::NamedBodyMap bodyMap,
         std::shared_ptr< TranslationalStatePropagatorSettings< double > > benchmarkPropagatorSettings,
         std::vector< double > shapeParameters, std::string outputPath )
 {
@@ -191,7 +191,7 @@ std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorX
                 firstBenchmarkStepSize, firstBenchmarkStepSize,
                 std::numeric_limits< double >::infinity( ), std::numeric_limits< double >::infinity( ) );
 
-    ShapeOptimizationProblem probBenchmarkFirst{ bodyMap, benchmarkIntegratorSettings, benchmarkPropagatorSettings };
+    ShapeOptimizationProblem probBenchmarkFirst{ bodyMap, benchmarkIntegratorSettings, benchmarkPropagatorSettings, vehicleDensity };
 
     std::cout << "Running first benchmark..." << std::endl;
     probBenchmarkFirst.fitness( shapeParameters );
@@ -202,7 +202,7 @@ std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorX
                 simulationStartEpoch, secondBenchmarkStepSize, RungeKuttaCoefficients::rungeKutta87DormandPrince,
                 secondBenchmarkStepSize, secondBenchmarkStepSize,
                 std::numeric_limits< double >::infinity( ), std::numeric_limits< double >::infinity( ) );
-    ShapeOptimizationProblem probBenchmarkSecond{ bodyMap, benchmarkIntegratorSettings, benchmarkPropagatorSettings };
+    ShapeOptimizationProblem probBenchmarkSecond{ bodyMap, benchmarkIntegratorSettings, benchmarkPropagatorSettings, vehicleDensity };
 
     std::cout << "Running second benchmark..." << std::endl;
     probBenchmarkSecond.fitness( shapeParameters );
@@ -312,9 +312,16 @@ int main()
     std::string outputPath = tudat_applications::getOutputPath( "ShapeOptimization" );
     bool generateAndCompareToBenchmark = true;
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////            SIMULATION SETTINGS            /////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     // Define simulation termination settings
     double maximumDuration = 86400.0;
     double terminationAltitude = 25.0E3;
+
+    // Vehicle properties
+    double vehicleDensity = 250.0;
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////            CREATE ENVIRONMENT            //////////////////////////////////////////////////////
@@ -337,7 +344,7 @@ int main()
     //! Create capsule, and add to body map
     //! NOTE: When making any modifications to the capsule vehicle, do NOT make them in this main function,
     //! but in the addCapsuleToBodyMap function
-    addCapsuleToBodyMap( bodyMap, shapeParameters );
+    addCapsuleToBodyMap( bodyMap, shapeParameters, vehicleDensity );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////             CREATE ACCELERATIONS            ///////////////////////////////////////////////////
@@ -377,7 +384,7 @@ int main()
                 std::make_shared< TranslationalStatePropagatorSettings< double > >(
                     centralBodies, accelerationSettingsMap, bodiesToPropagate, systemInitialState,
                     terminationSettings, cowell, dependentVariablesToSave );
-        benchmarkInterpolators = generateBenchmarks(simulationStartEpoch, bodyMap, benchmarkPropagatorSettings,
+        benchmarkInterpolators = generateBenchmarks(simulationStartEpoch, vehicleDensity, bodyMap, benchmarkPropagatorSettings,
                                                     shapeParameters, outputPath );
     }
 
@@ -445,7 +452,7 @@ int main()
                 std::shared_ptr< IntegratorSettings< > > integratorSettings = getIntegratorSettings( i, j, k, simulationStartEpoch );
 
                 // Construct problem and propagate trajectory using defined settings
-                ShapeOptimizationProblem prob{ bodyMap, integratorSettings, propagatorSettings };
+                ShapeOptimizationProblem prob{ bodyMap, integratorSettings, propagatorSettings, vehicleDensity };
                 prob.fitness( shapeParameters );
 
                 // Save state and dependent variable results to file
@@ -474,12 +481,15 @@ int main()
                     // Compute difference w.r.t. benchmark using the interpolators we created
                     for( auto stateIterator = stateHistory.begin(); stateIterator != stateHistory.end(); stateIterator++ )
                     {
-                        stateDifference[ stateIterator->first ] =
-                                stateIterator->second -
-                                benchmarkInterpolators.at( 0 )->interpolate( stateIterator->first );
-                        depVarDifference[ stateIterator->first ] =
-                                dependentVariableHistory.at( stateIterator->first ) -
-                                benchmarkInterpolators.at( 1 )->interpolate( stateIterator->first );
+                        if( dependentVariableHistory.count( stateIterator->first ) != 0 )
+                        {
+                            stateDifference[ stateIterator->first ] =
+                                    stateIterator->second -
+                                    benchmarkInterpolators.at( 0 )->interpolate( stateIterator->first );
+                            depVarDifference[ stateIterator->first ] =
+                                    dependentVariableHistory.at( stateIterator->first ) -
+                                    benchmarkInterpolators.at( 1 )->interpolate( stateIterator->first );
+                        }
                     }
 
                     // Write differences w.r.t. benchmarks to files

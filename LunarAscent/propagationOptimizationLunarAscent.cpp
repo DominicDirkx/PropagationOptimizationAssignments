@@ -522,12 +522,15 @@ int main( )
                     // Compute difference w.r.t. benchmark using the interpolators we created
                     for( auto stateIterator = stateHistory.begin(); stateIterator != stateHistory.end(); stateIterator++ )
                     {
-                        stateDifference[ stateIterator->first ] =
-                                stateIterator->second -
-                                benchmarkInterpolators.at( 0 )->interpolate( stateIterator->first );
-                        depVarDifference[ stateIterator->first ] =
-                                dependentVariableHistory.at( stateIterator->first ) -
-                                benchmarkInterpolators.at( 1 )->interpolate( stateIterator->first );
+                        if( dependentVariableHistory.count( stateIterator->first ) != 0 )
+                        {
+                            stateDifference[ stateIterator->first ] =
+                                    stateIterator->second -
+                                    benchmarkInterpolators.at( 0 )->interpolate( stateIterator->first );
+                            depVarDifference[ stateIterator->first ] =
+                                    dependentVariableHistory.at( stateIterator->first ) -
+                                    benchmarkInterpolators.at( 1 )->interpolate( stateIterator->first );
+                        }
                     }
 
                     // Write differences w.r.t. benchmarks to files

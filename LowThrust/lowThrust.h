@@ -154,12 +154,6 @@ private:
     //! Object holding the dynamics simulator
     mutable std::shared_ptr<SingleArcDynamicsSimulator< > > dynamicsSimulator_;
 
-    //! Map holding the propagated state history
-    mutable std::map< double, Eigen::VectorXd > propagatedStateHistory;
-
-    //! Map holding the dependent variable history
-    mutable std::map< double, Eigen::VectorXd > dependentVariableHistory;
-
 };
 
 } // Namespace tudat_applications

@@ -58,91 +58,132 @@ std::shared_ptr< PropagationTerminationSettings > getPropagationTerminationSetti
 
 }
 
+void getRadialVelocityShapingFunctions(
+        std::vector< std::shared_ptr< shape_based_methods::BaseFunctionHodographicShaping > >& radialVelocityFunctionComponents,
+        Eigen::VectorXd& freeCoefficientsRadialVelocityFunction,
+        const std::vector< double >& trajectoryParameters, const double frequency, const double scaleFactor,
+        const double timeOfFlight, const int numberOfRevolutions  )
+{
+    // Retrieve default methods (lowest-order in Gondelach and Noomen, 2015)
+    shape_based_methods::getRecommendedRadialVelocityBaseFunctions(
+                radialVelocityFunctionComponents, freeCoefficientsRadialVelocityFunction, timeOfFlight );
+
+    // Add degrees of freedom (highest-order in Gondelach and Noomen, 2015)
+    std::shared_ptr< shape_based_methods::BaseFunctionHodographicShapingSettings > fourthRadialVelocityBaseFunctionSettings =
+            std::make_shared< shape_based_methods::PowerTimesTrigonometricFunctionHodographicShapingSettings >(
+                1.0, 0.5 * frequency, scaleFactor );
+    std::shared_ptr< shape_based_methods::BaseFunctionHodographicShapingSettings > fifthRadialVelocityBaseFunctionSettings =
+            std::make_shared< shape_based_methods::PowerTimesTrigonometricFunctionHodographicShapingSettings >(
+                1.0, 0.5 * frequency, scaleFactor );
+    radialVelocityFunctionComponents.push_back(
+                createBaseFunctionHodographicShaping( shape_based_methods::scaledPowerSine, fourthRadialVelocityBaseFunctionSettings ) );
+    radialVelocityFunctionComponents.push_back(
+                createBaseFunctionHodographicShaping( shape_based_methods::scaledPowerCosine, fifthRadialVelocityBaseFunctionSettings ) );
+
+    // Set free parameters
+    freeCoefficientsRadialVelocityFunction = Eigen::VectorXd::Zero( 2 );
+    freeCoefficientsRadialVelocityFunction( 0 ) = trajectoryParameters.at( 3 );
+    freeCoefficientsRadialVelocityFunction( 1 ) = trajectoryParameters.at( 4 );
+}
+
+void getNormalVelocityShapingFunctions(
+        std::vector< std::shared_ptr< shape_based_methods::BaseFunctionHodographicShaping > >& normalVelocityFunctionComponents,
+        Eigen::VectorXd& freeCoefficientsNormalVelocityFunction,
+        const std::vector< double >& trajectoryParameters, const double frequency, const double scaleFactor,
+        const double timeOfFlight, const int numberOfRevolutions  )
+{
+    // Retrieve default methods (lowest-order in Gondelach and Noomen, 2015)
+    shape_based_methods::getRecommendedNormalAxialBaseFunctions( normalVelocityFunctionComponents, freeCoefficientsNormalVelocityFunction, timeOfFlight );
+
+    // Add degrees of freedom (highest-order in Gondelach and Noomen, 2015)
+    std::shared_ptr< shape_based_methods::BaseFunctionHodographicShapingSettings > fourthNormalVelocityBaseFunctionSettings =
+            std::make_shared< shape_based_methods::PowerTimesTrigonometricFunctionHodographicShapingSettings >(
+                1.0, 0.5 * frequency, scaleFactor );
+    std::shared_ptr< shape_based_methods::BaseFunctionHodographicShapingSettings > fifthNormalVelocityBaseFunctionSettings =
+            std::make_shared< shape_based_methods::PowerTimesTrigonometricFunctionHodographicShapingSettings >(
+                1.0, 0.5 * frequency, scaleFactor );
+    normalVelocityFunctionComponents.push_back(
+                createBaseFunctionHodographicShaping( shape_based_methods::scaledPowerSine, fourthNormalVelocityBaseFunctionSettings ) );
+    normalVelocityFunctionComponents.push_back(
+                createBaseFunctionHodographicShaping( shape_based_methods::scaledPowerCosine, fifthNormalVelocityBaseFunctionSettings ) );
+
+    // Set free parameters
+    freeCoefficientsNormalVelocityFunction = Eigen::VectorXd::Zero( 2 );
+    freeCoefficientsNormalVelocityFunction( 0 ) = trajectoryParameters.at( 5 );
+    freeCoefficientsNormalVelocityFunction( 1 ) = trajectoryParameters.at( 6 );
+}
+
+void getAxialVelocityShapingFunctions(
+        std::vector< std::shared_ptr< shape_based_methods::BaseFunctionHodographicShaping > >& axialVelocityFunctionComponents,
+        Eigen::VectorXd& freeCoefficientsAxialVelocityFunction,
+        const std::vector< double >& trajectoryParameters, const double frequency, const double scaleFactor,
+        const double timeOfFlight, const int numberOfRevolutions )
+{
+    // Retrieve default methods (lowest-order in Gondelach and Noomen, 2015)
+    shape_based_methods::getRecommendedAxialVelocityBaseFunctions(
+                axialVelocityFunctionComponents, freeCoefficientsAxialVelocityFunction,
+                timeOfFlight, numberOfRevolutions );
+
+    // Add degrees of freedom (highest-order in Gondelach and Noomen, 2015)
+    std::shared_ptr< shape_based_methods::BaseFunctionHodographicShapingSettings > fourthAxialVelocityBaseFunctionSettings =
+            std::make_shared< shape_based_methods::PowerTimesTrigonometricFunctionHodographicShapingSettings >
+            ( 3.0, ( numberOfRevolutions + 0.5 ) * frequency, scaleFactor );
+    std::shared_ptr< shape_based_methods::BaseFunctionHodographicShapingSettings > fifthAxialVelocityBaseFunctionSettings =
+            std::make_shared< shape_based_methods::PowerTimesTrigonometricFunctionHodographicShapingSettings >(
+                3.0, ( numberOfRevolutions + 0.5 ) * frequency, scaleFactor );
+    axialVelocityFunctionComponents.push_back(
+                createBaseFunctionHodographicShaping( shape_based_methods::scaledPowerCosine, fourthAxialVelocityBaseFunctionSettings ) );
+    axialVelocityFunctionComponents.push_back(
+                createBaseFunctionHodographicShaping( shape_based_methods::scaledPowerSine, fifthAxialVelocityBaseFunctionSettings ) );
+
+    // Set free parameters
+    freeCoefficientsAxialVelocityFunction = Eigen::VectorXd::Zero( 2 );
+    freeCoefficientsAxialVelocityFunction( 0 ) = trajectoryParameters.at( 7 );
+    freeCoefficientsAxialVelocityFunction( 1 ) =  trajectoryParameters.at( 8 );
+}
+
+
+
+//! Function that creates the object that computes the semi-analytical hodographic shaping method
 std::shared_ptr< HodographicShaping > createHodographicShapingObject(
         std::vector< double >& trajectoryParameters,
         const simulation_setup::NamedBodyMap bodyMap )
 {
+    // Retrieve basic properties from trajectory parameters
     double initialTime = getTrajectoryInitialTime( trajectoryParameters );
     double timeOfFlight = getTrajectoryTimeOfFlight( trajectoryParameters );
     double finalTime = getTrajectoryFinalTime( trajectoryParameters );
-
     int numberOfRevolutions = trajectoryParameters.at( 2 );
 
+    // Compute relevant frequency and scale factor for shaping functions
     double frequency = 2.0 * mathematical_constants::PI / timeOfFlight;
     double scaleFactor = 1.0 / timeOfFlight;
 
-    // Define settings for the two additional base functions for the radial velocity composite function.
+    // Retrieve settings for base functions in radial, normal and axial directions
     Eigen::VectorXd freeCoefficientsRadialVelocityFunction = Eigen::VectorXd::Zero( 0 );
     Eigen::VectorXd freeCoefficientsNormalVelocityFunction = Eigen::VectorXd::Zero( 0 );
     Eigen::VectorXd freeCoefficientsAxialVelocityFunction = Eigen::VectorXd::Zero( 0 );
 
     std::vector< std::shared_ptr< shape_based_methods::BaseFunctionHodographicShaping > > radialVelocityFunctionComponents;
-    shape_based_methods::getRecommendedRadialVelocityBaseFunctions(
-                radialVelocityFunctionComponents, freeCoefficientsRadialVelocityFunction, timeOfFlight );
-
-    {
-        std::shared_ptr< shape_based_methods::BaseFunctionHodographicShapingSettings > fourthRadialVelocityBaseFunctionSettings =
-                std::make_shared< shape_based_methods::PowerTimesTrigonometricFunctionHodographicShapingSettings >(
-                    1.0, 0.5 * frequency, scaleFactor );
-        std::shared_ptr< shape_based_methods::BaseFunctionHodographicShapingSettings > fifthRadialVelocityBaseFunctionSettings =
-                std::make_shared< shape_based_methods::PowerTimesTrigonometricFunctionHodographicShapingSettings >(
-                    1.0, 0.5 * frequency, scaleFactor );
-        radialVelocityFunctionComponents.push_back(
-                    createBaseFunctionHodographicShaping( shape_based_methods::scaledPowerSine, fourthRadialVelocityBaseFunctionSettings ) );
-        radialVelocityFunctionComponents.push_back(
-                    createBaseFunctionHodographicShaping( shape_based_methods::scaledPowerCosine, fifthRadialVelocityBaseFunctionSettings ) );
-        freeCoefficientsRadialVelocityFunction = Eigen::VectorXd::Zero( 2 );
-        freeCoefficientsRadialVelocityFunction( 0 ) = trajectoryParameters.at( 3 );
-        freeCoefficientsRadialVelocityFunction( 1 ) = trajectoryParameters.at( 4 );
-    }
-
-    // Get recommended base functions for the normal velocity composite function.
     std::vector< std::shared_ptr< shape_based_methods::BaseFunctionHodographicShaping > > normalVelocityFunctionComponents;
-    shape_based_methods::getRecommendedNormalAxialBaseFunctions( normalVelocityFunctionComponents, freeCoefficientsNormalVelocityFunction, timeOfFlight );
-
-    {
-        std::shared_ptr< shape_based_methods::BaseFunctionHodographicShapingSettings > fourthNormalVelocityBaseFunctionSettings =
-                std::make_shared< shape_based_methods::PowerTimesTrigonometricFunctionHodographicShapingSettings >(
-                    1.0, 0.5 * frequency, scaleFactor );
-        std::shared_ptr< shape_based_methods::BaseFunctionHodographicShapingSettings > fifthNormalVelocityBaseFunctionSettings =
-                std::make_shared< shape_based_methods::PowerTimesTrigonometricFunctionHodographicShapingSettings >(
-                    1.0, 0.5 * frequency, scaleFactor );
-        normalVelocityFunctionComponents.push_back(
-                    createBaseFunctionHodographicShaping( shape_based_methods::scaledPowerSine, fourthNormalVelocityBaseFunctionSettings ) );
-        normalVelocityFunctionComponents.push_back(
-                    createBaseFunctionHodographicShaping( shape_based_methods::scaledPowerCosine, fifthNormalVelocityBaseFunctionSettings ) );
-        freeCoefficientsNormalVelocityFunction = Eigen::VectorXd::Zero( 2 );
-        freeCoefficientsNormalVelocityFunction( 0 ) = trajectoryParameters.at( 5 );
-        freeCoefficientsNormalVelocityFunction( 1 ) = trajectoryParameters.at( 6 );
-    }
-
-    // Get recommended base functions for the axial velocity composite function.
     std::vector< std::shared_ptr< shape_based_methods::BaseFunctionHodographicShaping > > axialVelocityFunctionComponents;
-    shape_based_methods::getRecommendedAxialVelocityBaseFunctions(
-                axialVelocityFunctionComponents, freeCoefficientsAxialVelocityFunction,
-                timeOfFlight, numberOfRevolutions );
 
-    {
-        std::shared_ptr< shape_based_methods::BaseFunctionHodographicShapingSettings > fourthAxialVelocityBaseFunctionSettings =
-                std::make_shared< shape_based_methods::PowerTimesTrigonometricFunctionHodographicShapingSettings >
-                ( 3.0, ( numberOfRevolutions + 0.5 ) * frequency, scaleFactor );
-        std::shared_ptr< shape_based_methods::BaseFunctionHodographicShapingSettings > fifthAxialVelocityBaseFunctionSettings =
-                std::make_shared< shape_based_methods::PowerTimesTrigonometricFunctionHodographicShapingSettings >(
-                    3.0, ( numberOfRevolutions + 0.5 ) * frequency, scaleFactor );
-        axialVelocityFunctionComponents.push_back(
-                    createBaseFunctionHodographicShaping( shape_based_methods::scaledPowerCosine, fourthAxialVelocityBaseFunctionSettings ) );
-        axialVelocityFunctionComponents.push_back(
-                    createBaseFunctionHodographicShaping( shape_based_methods::scaledPowerSine, fifthAxialVelocityBaseFunctionSettings ) );
+    getRadialVelocityShapingFunctions(
+                radialVelocityFunctionComponents, freeCoefficientsRadialVelocityFunction, trajectoryParameters,
+                frequency, scaleFactor, timeOfFlight, numberOfRevolutions );
+    getNormalVelocityShapingFunctions(
+                normalVelocityFunctionComponents, freeCoefficientsNormalVelocityFunction, trajectoryParameters,
+                frequency, scaleFactor, timeOfFlight, numberOfRevolutions );
+    getAxialVelocityShapingFunctions(
+                axialVelocityFunctionComponents, freeCoefficientsAxialVelocityFunction, trajectoryParameters,
+                frequency, scaleFactor, timeOfFlight, numberOfRevolutions );
 
-        freeCoefficientsAxialVelocityFunction = Eigen::VectorXd::Zero( 2 );
-        freeCoefficientsAxialVelocityFunction( 0 ) = trajectoryParameters.at( 7 );
-        freeCoefficientsAxialVelocityFunction( 1 ) =  trajectoryParameters.at( 8 );
-    }
-
+    // Retrieve boundary conditions and central body gravitational parameter
     Eigen::Vector6d initialState = bodyMap.at( "Earth" )->getStateInBaseFrameFromEphemeris( initialTime );
     Eigen::Vector6d finalState = bodyMap.at( "Mars" )->getStateInBaseFrameFromEphemeris( finalTime );
     double centralBodyGravitationalParameter = bodyMap.at( "Sun" )->getGravityFieldModel( )->getGravitationalParameter( );
 
+    // Create and return shape-based method
     return std::make_shared< HodographicShaping >(
                 initialState, finalState, timeOfFlight, centralBodyGravitationalParameter, numberOfRevolutions,
                 radialVelocityFunctionComponents, normalVelocityFunctionComponents, axialVelocityFunctionComponents,
@@ -151,6 +192,7 @@ std::shared_ptr< HodographicShaping > createHodographicShapingObject(
                 freeCoefficientsAxialVelocityFunction );
 }
 
+//! Function that generates thrust acceleration model from thrust parameters
 std::shared_ptr< ThrustAccelerationSettings > getThrustAccelerationSettingsFromParameters(
         std::vector< double >& trajectoryParameters,
         const simulation_setup::NamedBodyMap bodyMap )
@@ -159,6 +201,7 @@ std::shared_ptr< ThrustAccelerationSettings > getThrustAccelerationSettingsFromP
                 bodyMap, "Vehicle", nullptr, nullptr, getTrajectoryInitialTime( trajectoryParameters ) );
 }
 
+//! Function to retrieve the semi-analytical calculation of the state along the shape-based trajectory at a given time
 Eigen::Vector6d getHodographicLowThrustStateAtEpoch(
         std::vector< double >& trajectoryParameters,
         const simulation_setup::NamedBodyMap bodyMap,
@@ -177,6 +220,7 @@ Eigen::Vector6d getHodographicLowThrustStateAtEpoch(
 
 using namespace tudat_applications::PropagationOptimization2020;
 
+//! Constructor for the problem class
 LowThrustProblem::LowThrustProblem( const simulation_setup::NamedBodyMap bodyMap,
                                     const std::shared_ptr< IntegratorSettings< > > integratorSettings,
                                     const std::shared_ptr< MultiTypePropagatorSettings< double > > propagatorSettings,
@@ -196,6 +240,7 @@ LowThrustProblem::LowThrustProblem( const simulation_setup::NamedBodyMap bodyMap
     }
 }
 
+//! Function to compute propagate the dynamics of the vehicle defined by the trajectoryParameters
 std::vector< double > LowThrustProblem::fitness( std::vector< double >& trajectoryParameters ) const
 {
     // Create trajectory shape object
