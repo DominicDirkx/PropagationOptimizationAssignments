@@ -85,7 +85,8 @@ public:
             const std::shared_ptr< MultiTypePropagatorSettings< double > > propagatorSettings,
             double specificImpulse,
             double minimumMarsDistance,
-            double timeBuffer );
+            double timeBuffer,
+            const bool performPropagation = true );
 
     // Standard constructor
     LowThrustProblem( )
@@ -121,7 +122,10 @@ public:
     //!
     std::vector< double > fitness( std::vector< double >& x ) const;
 
-
+    std::shared_ptr< HodographicShaping > getHodographicShaping( )
+    {
+        return hodographicShaping_;
+    }
 
 private:
 
@@ -142,6 +146,8 @@ private:
     double minimumMarsDistance_;
 
     double timeBuffer_;
+
+    bool performPropagation_;
 
     mutable std::shared_ptr< HodographicShaping > hodographicShaping_;
 

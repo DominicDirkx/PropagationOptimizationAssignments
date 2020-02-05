@@ -163,6 +163,14 @@ std::shared_ptr< DependentVariableSaveSettings > getDependentVariableSaveSetting
  * to the state and dependent variables of one of the benchmarks. The states are written to files, as well
  * as the difference in state and dependent variables between the two benchmarks.
  *
+ *  The following files are written to files by this function (to the directory LunarAscent/benchmarks/...:
+ *
+ *  - benchmarkStates_1.dat, benchmarkStates_2.dat The numerically propagated states from the two propagations
+ *  - benchmarkDependent_1.dat, benchmarkDependent_2.dat The dependent variables from the two propagations
+ *  - benchmarkStateDifference.dat Difference between the Cartesian states of the two benchmark runs
+ *  - benchmarkDependentDifference.dat  Difference between the dependent variables of the two benchmark runs
+ *
+ *
  *  CODING NOTE: THIS FUNCTION CAN BE EXTENDED TO GENERATE A MORE ROBUST BENCHMARK (USING MORE THAN 2 RUNS)
  *
  * \param simulationStartEpoch The start time of the simulation in seconds.
@@ -217,6 +225,8 @@ std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorX
     // Write the state maps of both benchmarks to files
     input_output::writeDataMapToTextFile( firstBenchmarkStates, "benchmark1.dat", outputPath );
     input_output::writeDataMapToTextFile( secondBenchmarkStates, "benchmark2.dat", outputPath );
+    input_output::writeDataMapToTextFile( firstBenchmarkStates, "benchmarkDependent_1.dat", outputPath );
+    input_output::writeDataMapToTextFile( secondBenchmarkStates, "benchmarkDependent_2.dat", outputPath );
 
     // Create 8th-order Lagrange interpolators for states and dependent variables of both runs
     std::shared_ptr< InterpolatorSettings > interpolatorSettings = std::make_shared< LagrangeInterpolatorSettings >( 8 );
@@ -260,14 +270,11 @@ std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorX
 }
 
 /*!
- *   This function computes the dynamics of a lunar ascent vehicle, starting at zero velocity on the Moon's surface. The only
- *   accelerations acting on the spacecraft are the Moon's point-mass gravity, and the thrust of the vehicle. Both the
- *   translational dynamics and mass of the vehicle are propagated, using a fixed specific impulse.
+ *   This function computes the dynamics of a lunar ascent vehicle, starting at zero velocity on the Moon's surface, using a
+ *   variety of integrator and propagator settings (see comments under "RUN SIMULATION FOR VARIOUS SETTINGS").
+ *   For each run, the differences w.r.t. a  benchmark propagation are computed, providing a proxy for setting quality.
  *
- *   The thrust is computed based on a fixed thrust magnitude, and a variable thrust direction. The trust direction is defined
- *   on a set of 5 nodes, spread eavenly in time. At each node, a thrust angle theta is defined, which gives the angle between the
- *   -z and y angles in the ascent vehicle's vertical frame (see Mooij, 1994). Between the nodes, the thrust is linearly
- *   interpolated. If the propagation goes beyond the bounds of the nodes, the boundary value is used.
+ *   The propagation starts near the lunar surface, with a speed relative to the Moon of 10 m/s
  *
  *   The propagation is terminated as soon as one of the following conditions is met:
  *
@@ -276,18 +283,28 @@ std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorX
  *   - Propagation time > 3600 s
  *   - Vehicle mass < 1000 kg
  *
- *   Key outputs:
+ *  This propagation assumes only point mass gravity by the Moon and thrust acceleration of the vehicle
+ *  (see block 'CREATE ACCELERATIONS'). Both the translational dynamics and mass of the vehicle are propagated,
+ *  using a fixed specific impulse.
  *
- *   propagatedStateHistory Numerically propagated Cartesian state
- *   dependentVariableHistory Dependent variables saved during the state propagation of the ascent *
  *
- *   Input parameters:
+ *   The thrust is computed based on a fixed thrust magnitude, and a variable thrust direction. The trust direction is defined
+ *   on a set of 5 nodes, spread eavenly in time. At each node, a thrust angle theta is defined, which gives the angle between the
+ *   -z and y angles in the ascent vehicle's vertical frame (see Mooij, 1994). Between the nodes, the thrust is linearly
+ *   interpolated. If the propagation goes beyond the bounds of the nodes, the boundary value is used. The thrust profile
+ *   is parameterized by the values of the vector thrustParameters
  *
- *   thrustParameters: Vector contains the following:
+ *    The entries of the vector 'thrustParameters' contains the following:
  *
  *   - Entry 0: Constant thrust magnitude
  *   - Entry 1: Constant spacing in time between nodes
- *   - Entry 2-6: Thrust angle theta, at five nodes
+ *   - Entry 2-6: Thrust angle theta, at nodes 1-5 (in order)
+ *
+ *   Details on the outputs written by this file can be found:
+ *
+ *      Benchmark data: comments for 'generateBenchmarks' function
+ *      Results for integrator/propagator variations: comments under "RUN SIMULATION FOR VARIOUS SETTINGS"
+ *
  */
 int main( )
 {

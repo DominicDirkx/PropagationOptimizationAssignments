@@ -154,10 +154,19 @@ std::shared_ptr< DependentVariableSaveSettings > getDependentVariableSaveSetting
 
 //! Function to generate to accurate benchmarks.
 /*!
- * This function runs two propagations with two different integrator settings that serve as benchmarks for
- * the nominal runs. To be able to compare these, the function returns the two interpolators pertaining
- * to the state and dependent variables of one of the benchmarks. The states are written to files, as well
- * as the difference in state and dependent variables between the two benchmarks.
+ *  This function runs two propagations with two different integrator settings that serve as benchmarks for
+ *  the nominal runs. To be able to compare these, the function returns the two interpolators pertaining
+ *  to the state and dependent variables of one of the benchmarks. The states are written to files, as well
+ *  as the difference in state and dependent variables between the two benchmarks.
+ *
+ *  The following files are written to files by this function (to the directory ShapeOptimziation/benchmarks/...:
+ *
+ *  - benchmarkStates_1.dat, benchmarkStates_2.dat The numerically propagated states from the two propagations
+ *  - benchmarkDependent_1.dat, benchmarkDependent_2.dat The dependent variables from the two propagations
+ *  - benchmarkStateDifference.dat Difference between the Cartesian states of the two benchmark runs
+ *  - benchmarkDependentDifference.dat  Difference between the dependent variables of the two benchmark runs
+ *
+ *
  *
  *  CODING NOTE: THIS FUNCTION CAN BE EXTENDED TO GENERATE A MORE ROBUST BENCHMARK (USING MORE THAN 2 RUNS)
  *
@@ -167,7 +176,7 @@ std::shared_ptr< DependentVariableSaveSettings > getDependentVariableSaveSetting
  * which is used to run the benchmark propagations.
  * \param shapeParameters The vector of doubles that represents the shape parameters for the capsule.
  * \param outputPath String containing the path to the output directory.
- * \return
+ * \return Interpolators providing values for state and dependent variables of the benchmark run
  */
 std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorXd > > > generateBenchmarks(
         double simulationStartEpoch, simulation_setup::NamedBodyMap bodyMap,
@@ -208,9 +217,11 @@ std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorX
     // Put the benchmark data in a separate directory
     outputPath.append("/benchmarks/");
 
-    // Write the state maps of both benchmarks to files
-    input_output::writeDataMapToTextFile( firstBenchmarkStates, "benchmark1.dat", outputPath );
-    input_output::writeDataMapToTextFile( secondBenchmarkStates, "benchmark2.dat", outputPath );
+    // Write the state and dependent variable maps of both benchmarks to files
+    input_output::writeDataMapToTextFile( firstBenchmarkStates, "benchmarkStates_1.dat", outputPath );
+    input_output::writeDataMapToTextFile( secondBenchmarkStates, "benchmarkStates_2.dat", outputPath );
+    input_output::writeDataMapToTextFile( firstBenchmarkStates, "benchmarkDependent_1.dat", outputPath );
+    input_output::writeDataMapToTextFile( secondBenchmarkStates, "benchmarkDependent_2.dat", outputPath );
 
     // Create 8th-order Lagrange interpolators for states and dependent variables of both runs
     std::shared_ptr< InterpolatorSettings > interpolatorSettings = std::make_shared< LagrangeInterpolatorSettings >( 8 );
@@ -254,22 +265,27 @@ std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorX
 }
 
 /*!
- *   This function computes the dynamics of a capsule re-entering the atmosphere of the Earth, starting 120 km above the surface
- *   of the planet, with a velocity of 7.83 km/s. This propagation assumes only point mass gravity and aerodynamic acceleration, providing
- *   a baseline for further investigation.
+ *   This function computes the dynamics of a capsule re-entering the atmosphere of the Earth, using a variety of integrator
+ *   and propagator settings (see comments under "RUN SIMULATION FOR VARIOUS SETTINGS"). For each run, the differences w.r.t. a
+ *   benchmark propagation are computed, providing a proxy for setting quality.
  *
- *   The trajectory of the capsule is heavily dependent on the shape of the vehicle, which is determined by the five shape parameters
- *   that form the input for the simulation (see below). These parameters are used to compute the aerodynamic accelerations on the
- *   vehicle (see also Dirkx and Mooij, 2018).
+ *   The vehicle starts 120 km above the surface of the planet, with a speed of 7.83 km/s in an Earth-fixed frame (see
+ *   getInitialState function).
  *
- *   The propagation is terminated as soon as one of the following conditions is met:
+ *   The propagation is terminated as soon as one of the following conditions is met (see
+ *   getPropagationTerminationSettings function):
  *
  *   - Altitude < 25 km
  *   - Propagation time > 24 hr
  *
- *   Input parameters:
+ *   This propagation assumes only point mass gravity by the Earth and aerodynamic accelerations (see block 'CREATE ACCELERATIONS')
  *
- *   shapeParameters: Vector contains the following:
+ *   The trajectory of the capsule is heavily dependent on the shape and orientation of the vehicle. Here, the shape is
+ *   determined here by the five parameters, which are used to compute the aerodynamic accelerations on the
+ *   vehicle using a modified Newtonian flow (see also Dirkx and Mooij, 2018). The bank angle and sideslip angles are set to zero.
+ *   The vehicle shape and angle of attack are defined by values in the vector shapeParameters.
+ *
+ *   The entries of the vector 'shapeParameters' contains the following:
  *
  *   - Entry 0:  Nose radius
  *   - Entry 1:  Middle radius
@@ -277,6 +293,12 @@ std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorX
  *   - Entry 3:  Rear angle
  *   - Entry 4:  Side radius
  *   - Entry 5:  Constant Angle of Attack
+ *
+ *   Details on the outputs written by this file can be found:
+ *
+ *      Benchmark data: comments for 'generateBenchmarks' function
+ *      Results for integrator/propagator variations: comments under "RUN SIMULATION FOR VARIOUS SETTINGS"
+ *
  */
 int main()
 {

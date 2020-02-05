@@ -12,6 +12,49 @@
 
 using namespace tudat_applications::PropagationOptimization2020;
 
+//! Function to write properties of shape-based hodographic solution to file
+/*!
+ *
+ *  Function to write properties of shape-based hodographic solution to file. For a given trajectory shape, this function writes:
+ *
+ *   - hodographicTrajectory.dat: Cartesian states of semi-analytical trajectory
+ *   - hodographicThrustAcceleration.dat: Thrust acceleration in inertial, Cartesian, coordinates, along the semi-analytical
+ *                                        trajectory.
+ *
+ *  NOTE: The independent variable (first column) does not represent teh usual time (seconds since J2000), but instead denotes
+ *  the time since departure.
+ *
+ *  These files are written to the directory specified by the 'outputPath' variables
+ */
+void printSemiAnalyticalHodographicShapeToFile(
+        const std::shared_ptr< HodographicShaping > shapeObject,
+        const std::vector< double >& trajectoryParameters,
+        const double specificImpulse,
+        const std::string outputPath )
+{
+    std::vector< double > epochs;
+    double startTime = 0.0;
+    double finalTime = getTrajectoryTimeOfFlight( trajectoryParameters );
+    int numberOfDataPoints = 10000;
+    double stepSize = ( finalTime - startTime ) / static_cast< double >( numberOfDataPoints - 1 );
+    for( int i = 0; i < numberOfDataPoints; i++ )
+    {
+        epochs.push_back( startTime + static_cast< double >( i ) * stepSize );
+    }
+
+    std::map< double, Eigen::VectorXd > thrustAccelerationProfile;
+    shapeObject->getThrustAccelerationProfile(
+                epochs, thrustAccelerationProfile, [=](const double){return specificImpulse; }, nullptr );
+
+    std::map< double, Eigen::Vector6d > propagatedTrajectory;
+    shapeObject->getTrajectory( epochs, propagatedTrajectory );
+
+    input_output::writeDataMapToTextFile(
+                propagatedTrajectory, "hodographicTrajectory.dat", outputPath );
+    input_output::writeDataMapToTextFile(
+                thrustAccelerationProfile, "hodographicThrustAcceleration.dat", outputPath );
+}
+
 //! Function to retrieve the integrator settings for the current run.
 /*!
  * This function returns a shared pointer to an IntegratorSettings object, based on the indices passed to
@@ -93,6 +136,14 @@ std::shared_ptr< DependentVariableSaveSettings > getDependentVariableSaveSetting
  * the nominal runs. To be able to compare these, the function returns the two interpolators pertaining
  * to the state and dependent variables of one of the benchmarks. The states are written to files, as well
  * as the difference in state and dependent variables between the two benchmarks.
+ *
+ *  The following files are written to files by this function (to the directory LowThrust/benchmarks/...:
+ *
+ *  - benchmarkStates_1.dat, benchmarkStates_2.dat The numerically propagated states from the two propagations
+ *  - benchmarkDependent_1.dat, benchmarkDependent_2.dat The dependent variables from the two propagations
+ *  - benchmarkStateDifference.dat Difference between the Cartesian states of the two benchmark runs
+ *  - benchmarkDependentDifference.dat  Difference between the dependent variables of the two benchmark runs
+ *
  *
  *  CODING NOTE: THIS FUNCTION CAN BE EXTENDED TO GENERATE A MORE ROBUST BENCHMARK (USING MORE THAN 2 RUNS)
  *
@@ -192,6 +243,48 @@ std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorX
     return interpolators;
 }
 
+/*!
+ *   This function computes the dynamics of an interplanetary low-thrust trajectory, using a thrust profile determined from
+ *   a Hodographic shaping method (see Gondelach and Noomen, 2015). This file propagates the dynamics using a variety of integrator
+ *   and propagator settings (see comments under "RUN SIMULATION FOR VARIOUS SETTINGS"). For each run, the differences w.r.t. a
+ *   benchmark propagation are computed, providing a proxy for setting quality.
+ *
+ *   The low-thrust trajectory computed by the shape-based method starts at the Earth's center of mass, and terminates at Mars'
+ *   center of mass.
+ *
+ *   The vehicle starts on the Hodographic low-thrust trajectory, 30 days (defined by the timeBuffer variable) after it 'departs'
+ *   the Earth's center of mass.
+ *
+ *   The propagation is terminated as soon as one of the following conditions is met (see
+ *   getPropagationTerminationSettings function):
+ *
+ *   - Distance to Mars < 50000 km
+ *   - Propagation time > Time-of-flight of hodographic trajectory
+ *
+ *   This propagation assumes only point mass gravity by the Sun and thrust acceleration of the vehicle
+ *   (see block 'CREATE ACCELERATIONS'). Both the translational dynamics and mass of the vehicle are propagated,
+ *   using a fixed specific impulse.
+ *
+ *   The trajectory of the capsule is determined by its departure and arrival time (which define the initial and final states)
+ *   as well as the free parameters of the shaping method. The free parameters of the shaping method defined here are the same
+ *   as for the 'higher-order solution' in Section V.A of Gondelach and Noomen (2015). The free parameters define the amplitude
+ *   of specific types of velocity shaping functions. The low-thrust hodographic trajectory is parameterized by the values of
+ *   the vector trajectoryParameters
+ *
+ *    The entries of the vector 'trajectoryParameters' contains the following:
+ *
+ *   - Entry 0: Constant thrust magnitude
+ *   - Entry 1: Constant spacing in time between nodes
+ *   - Entry 2-6: Thrust angle theta, at nodes 1-5 (in order)
+ *
+ *   Details on the outputs written by this file can be found:
+ *
+ *      Benchmark data: comments for 'generateBenchmarks' function
+ *      Results for integrator/propagator variations: comments under "RUN SIMULATION FOR VARIOUS SETTINGS"
+ *      Trajectory for semi-analytical hodographic shape-based solution: Comments with, and call to,
+ *                                                                       printSemiAnalyticalHodographicShapeToFile function
+ *
+ */
 int main( )
 {
     // Load Spice kernels.
@@ -303,7 +396,21 @@ int main( )
         benchmarkInterpolators = generateBenchmarks(
                     initialPropagationTime, specificImpulse, minimumMarsDistance, timeBuffer, bodyMap, benchmarkPropagatorSettings,
                     trajectoryParameters, outputPath );
+
     }
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////     PRINT DATA FOR HODOGRAPHIC SEMI-ANALYTICAL METHOD         /////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+    LowThrustProblem semiAnalyticalProblem{
+        bodyMap, nullptr, nullptr, specificImpulse, minimumMarsDistance, timeBuffer, false };
+    semiAnalyticalProblem.fitness( trajectoryParameters );
+    std::shared_ptr< HodographicShaping > shapeObject = semiAnalyticalProblem.getHodographicShaping( );
+
+    printSemiAnalyticalHodographicShapeToFile(
+                shapeObject, trajectoryParameters, specificImpulse, outputPath + "HodographicSemiAnalytical" );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////             RUN SIMULATION FOR VARIOUS SETTINGS            ////////////////////////////////////

@@ -182,51 +182,59 @@ LowThrustProblem::LowThrustProblem( const simulation_setup::NamedBodyMap bodyMap
                                     const std::shared_ptr< MultiTypePropagatorSettings< double > > propagatorSettings,
                                     double specificImpulse,
                                     double minimumMarsDistance,
-                                    double timeBuffer ):
+                                    double timeBuffer,
+                                    const bool performPropagation ):
     bodyMap_(bodyMap), integratorSettings_(integratorSettings), propagatorSettings_(propagatorSettings),
-    specificImpulse_( specificImpulse ), minimumMarsDistance_( minimumMarsDistance ), timeBuffer_( timeBuffer )
+    specificImpulse_( specificImpulse ), minimumMarsDistance_( minimumMarsDistance ), timeBuffer_( timeBuffer ),
+    performPropagation_( performPropagation )
 {
-    translationalStatePropagatorSettings_ =
-            std::dynamic_pointer_cast< TranslationalStatePropagatorSettings< double > >(
-                propagatorSettings_->propagatorSettingsMap_.at( translational_state ).at( 0 ) );
+    if( performPropagation )
+    {
+        translationalStatePropagatorSettings_ =
+                std::dynamic_pointer_cast< TranslationalStatePropagatorSettings< double > >(
+                    propagatorSettings_->propagatorSettingsMap_.at( translational_state ).at( 0 ) );
+    }
 }
 
 std::vector< double > LowThrustProblem::fitness( std::vector< double >& trajectoryParameters ) const
 {
-
-    double initialPropagationTime = getTrajectoryInitialTime( trajectoryParameters, timeBuffer_ );
-    integratorSettings_->initialTime_ = initialPropagationTime;
-
     // Create trajectory shape object
     hodographicShaping_ = createHodographicShapingObject(
                 trajectoryParameters, bodyMap_ );
 
-    // Extract existing acceleration settings, and clear existing self-exerted accelerations of vehicle
-    simulation_setup::SelectedAccelerationMap accelerationSettings =
-            translationalStatePropagatorSettings_->getAccelerationSettingsMap( );
-    accelerationSettings[ "Vehicle" ][ "Vehicle" ].clear( );
+    if( performPropagation_ )
+    {
+        double initialPropagationTime = getTrajectoryInitialTime( trajectoryParameters, timeBuffer_ );
+        integratorSettings_->initialTime_ = initialPropagationTime;
 
-    // Retrieve new acceleration model for thrust and set in list of settings
-    std::shared_ptr< AccelerationSettings > newThrustSettings = hodographicShaping_->getLowThrustAccelerationSettings(
-                bodyMap_, "Vehicle", [=](const double){return specificImpulse_;}, integratorSettings_, getTrajectoryInitialTime( trajectoryParameters ) );
-    accelerationSettings[ "Vehicle" ][ "Vehicle" ].push_back( newThrustSettings );
+        // Extract existing acceleration settings, and clear existing self-exerted accelerations of vehicle
+        simulation_setup::SelectedAccelerationMap accelerationSettings =
+                translationalStatePropagatorSettings_->getAccelerationSettingsMap( );
+        accelerationSettings[ "Vehicle" ][ "Vehicle" ].clear( );
 
-    // Update translational propagatot settings
-    translationalStatePropagatorSettings_->resetAccelerationModelsMap(
-                accelerationSettings, bodyMap_ );
-    Eigen::Vector6d systemInitialState = getHodographicLowThrustStateAtEpoch(
-                trajectoryParameters, bodyMap_, initialPropagationTime );
-    translationalStatePropagatorSettings_->resetInitialStates( systemInitialState );
+        // Retrieve new acceleration model for thrust and set in list of settings
+        std::shared_ptr< AccelerationSettings > newThrustSettings = hodographicShaping_->getLowThrustAccelerationSettings(
+                    bodyMap_, "Vehicle", [=](const double){return specificImpulse_;}, integratorSettings_, getTrajectoryInitialTime( trajectoryParameters ) );
+        accelerationSettings[ "Vehicle" ][ "Vehicle" ].push_back( newThrustSettings );
 
-    // Update full propagator settings
-    propagatorSettings_->resetIntegratedStateModels( bodyMap_ );
-    propagatorSettings_->resetInitialStates(
-                createCombinedInitialState< double >( propagatorSettings_->propagatorSettingsMap_ ).segment( 0, 7 ) );
-    propagatorSettings_->resetTerminationSettings(
-                getPropagationTerminationSettings(
-                    trajectoryParameters, minimumMarsDistance_, 0.0 ) );
+        // Update translational propagatot settings
+        translationalStatePropagatorSettings_->resetAccelerationModelsMap(
+                    accelerationSettings, bodyMap_ );
+        Eigen::Vector6d systemInitialState = getHodographicLowThrustStateAtEpoch(
+                    trajectoryParameters, bodyMap_, initialPropagationTime );
+        translationalStatePropagatorSettings_->resetInitialStates( systemInitialState );
 
-    dynamicsSimulator_ = std::make_shared< SingleArcDynamicsSimulator< > >( bodyMap_, integratorSettings_, propagatorSettings_ );
+        // Update full propagator settings
+        propagatorSettings_->resetIntegratedStateModels( bodyMap_ );
+        propagatorSettings_->resetInitialStates(
+                    createCombinedInitialState< double >( propagatorSettings_->propagatorSettingsMap_ ).segment( 0, 7 ) );
+        propagatorSettings_->resetTerminationSettings(
+                    getPropagationTerminationSettings(
+                        trajectoryParameters, minimumMarsDistance_, 0.0 ) );
+
+        dynamicsSimulator_ = std::make_shared< SingleArcDynamicsSimulator< > >( bodyMap_, integratorSettings_, propagatorSettings_ );
+
+    }
 
     return {0.0};
 
