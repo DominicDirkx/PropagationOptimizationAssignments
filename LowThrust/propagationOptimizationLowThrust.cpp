@@ -8,78 +8,9 @@
  *    http://tudat.tudelft.nl/LICENSE.
  */
 
-#include "lunarAscent.h"
+#include "lowThrust.h"
 
 using namespace tudat_applications::PropagationOptimization2020;
-
-//! Function to retrieve the initial Cartesian state of the vehicle.
-/*!
- * Function to retrieve the initial Cartesian state of the vehicle. The spherical orbital parameters are
- * first converted to Cartesian coordinates and subsequently transformed to the global frame of reference.
- *
- * \param simulationStartEpoch The start time of the simulation in seconds.
- * \param bodyMap NamedBodyMap containing the bodies in the simulation.
- * \return Eigen Vector6d containing the system's initial state in Cartesian coordinates.
- */
-Eigen::Vector6d getInitialState( double simulationStartEpoch, simulation_setup::NamedBodyMap bodyMap )
-{
-    // Define initial spherical elements for vehicle.
-    Eigen::Vector6d ascentVehicleSphericalEntryState;
-    ascentVehicleSphericalEntryState( SphericalOrbitalStateElementIndices::radiusIndex ) =
-            spice_interface::getAverageRadius( "Moon" ) + 100.0;
-    ascentVehicleSphericalEntryState( SphericalOrbitalStateElementIndices::latitudeIndex ) =
-            unit_conversions::convertDegreesToRadians( 0.6875 );
-    ascentVehicleSphericalEntryState( SphericalOrbitalStateElementIndices::longitudeIndex ) =
-            unit_conversions::convertDegreesToRadians( 23.4333 );
-    ascentVehicleSphericalEntryState( SphericalOrbitalStateElementIndices::speedIndex ) = 10.0;
-    ascentVehicleSphericalEntryState( SphericalOrbitalStateElementIndices::flightPathIndex ) =
-            unit_conversions::convertDegreesToRadians( 90.0 );
-    ascentVehicleSphericalEntryState( SphericalOrbitalStateElementIndices::headingAngleIndex ) =
-            unit_conversions::convertDegreesToRadians( 90.0 );
-
-    // Convert vehicle state from spherical elements to body-fixed Cartesian elements.
-    Eigen::Vector6d bodyFixedSystemInitialState = convertSphericalOrbitalToCartesianState(
-                ascentVehicleSphericalEntryState );
-
-    // Convert the state to the global (inertial) frame.
-    std::shared_ptr< ephemerides::RotationalEphemeris > moonRotationalEphemeris =
-            bodyMap.at( "Moon" )->getRotationalEphemeris( );
-    return transformStateToGlobalFrame(
-                bodyFixedSystemInitialState, simulationStartEpoch, moonRotationalEphemeris );
-
-}
-
-//! Get the propagation termination settings for the lunar ascent.
-/*!
- * \param simulationStartEpoch Start time of the simulation in seconds.
- * \param maximumDuration Time in seconds, specifying the maximum time duration before which the
- * simulation should stop.
- * \param terminationAltitude Altitude in meters, specifying the maximum altitude before which the
- * simulation should stop.
- * \param vehicleDryMass Dry mass of the vehicle in kg. This is value is used to create a termination
- * condition that mandates the simulation to stop once all fuel has been used up.
- * \return Shared pointer to the PropagationTerminationSettings object.
- */
-std::shared_ptr< PropagationTerminationSettings > getPropagationTerminationSettings( const double simulationStartEpoch,
-                                                                                     const double maximumDuration,
-                                                                                     const double terminationAltitude,
-                                                                                     const double vehicleDryMass )
-{
-    std::vector< std::shared_ptr< PropagationTerminationSettings > > terminationSettingsList;
-    terminationSettingsList.push_back( std::make_shared< PropagationTimeTerminationSettings >(
-                                           simulationStartEpoch + maximumDuration ) );
-    terminationSettingsList.push_back( std::make_shared< PropagationDependentVariableTerminationSettings >(
-                                           std::make_shared< SingleDependentVariableSaveSettings >(
-                                               altitude_dependent_variable, "Vehicle", "Moon" ), terminationAltitude, false ) );
-    terminationSettingsList.push_back( std::make_shared< PropagationDependentVariableTerminationSettings >(
-                                           std::make_shared< SingleDependentVariableSaveSettings >(
-                                               altitude_dependent_variable, "Vehicle", "Moon" ), 0.0, true ) );
-    terminationSettingsList.push_back( std::make_shared< PropagationDependentVariableTerminationSettings >(
-                                           std::make_shared< SingleDependentVariableSaveSettings >(
-                                               current_body_mass_dependent_variable, "Vehicle" ), vehicleDryMass, true ) );
-    return std::make_shared< PropagationHybridTerminationSettings >( terminationSettingsList, true );
-
-}
 
 //! Function to retrieve the integrator settings for the current run.
 /*!
@@ -129,7 +60,7 @@ std::shared_ptr< IntegratorSettings< > > getIntegratorSettings(
     else
     {
         // Create integrator settings
-        double timeStep = std::pow( 2, k );
+        double timeStep = 3600.0 * std::pow( 2, k );
         return std::make_shared< IntegratorSettings< > >( rungeKutta4, simulationStartEpoch, timeStep );
     }
 }
@@ -148,11 +79,11 @@ std::shared_ptr< DependentVariableSaveSettings > getDependentVariableSaveSetting
     // Define dependent variables
     std::vector< std::shared_ptr< SingleDependentVariableSaveSettings > > dependentVariablesList;
     dependentVariablesList.push_back( std::make_shared< SingleDependentVariableSaveSettings >(
-                                          altitude_dependent_variable, "Vehicle", "Moon" ) );
+                                          relative_distance_dependent_variable, "Vehicle", "Earth" ) );
     dependentVariablesList.push_back( std::make_shared< SingleDependentVariableSaveSettings >(
-                                          relative_speed_dependent_variable, "Vehicle", "Moon" ) );
-    dependentVariablesList.push_back( std::make_shared< BodyAerodynamicAngleVariableSaveSettings >(
-                                          "Vehicle", flight_path_angle ) );
+                                          relative_distance_dependent_variable, "Vehicle", "Sun" ) );
+    dependentVariablesList.push_back( std::make_shared< SingleDependentVariableSaveSettings >(
+                                          relative_distance_dependent_variable, "Vehicle", "Mars" ) );
     return std::make_shared< DependentVariableSaveSettings >( dependentVariablesList, false );
 }
 
@@ -169,44 +100,46 @@ std::shared_ptr< DependentVariableSaveSettings > getDependentVariableSaveSetting
  * \param bodyMap NamedBodyMap containing the bodies in the simulation.
  * \param benchmarkPropagatorSettings Shared pointer to a translational propagator settings object,
  * which is used to run the benchmark propagations.
- * \param thrustParameters The vector of doubles that represents the thrust parameters for the capsule.
+ * \param trajectoryParameters The vector of doubles that represents the trajectory parameters for the capsule.
  * \param outputPath String containing the path to the output directory.
  * \return
  */
 std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorXd > > > generateBenchmarks(
-        const double simulationStartEpoch, const double specificImpulse, const simulation_setup::NamedBodyMap& bodyMap,
+        const double simulationStartEpoch, const double specificImpulse, const double minimumMarsDistance,
+        const double timeBuffer,const simulation_setup::NamedBodyMap& bodyMap,
         const std::shared_ptr< MultiTypePropagatorSettings< double > > benchmarkPropagatorSettings,
-        std::vector< double > thrustParameters, std::string outputPath )
+        std::vector< double > trajectoryParameters, std::string outputPath )
 {
     // Create integrator settings for 1st run
-    double firstBenchmarkStepSize = 0.05;
+    double firstBenchmarkStepSize = 3600.0;
     std::shared_ptr< IntegratorSettings< > > benchmarkIntegratorSettings;
     benchmarkIntegratorSettings = std::make_shared< RungeKuttaVariableStepSizeSettings< > >(
                 simulationStartEpoch, firstBenchmarkStepSize, RungeKuttaCoefficients::rungeKutta87DormandPrince,
                 firstBenchmarkStepSize, firstBenchmarkStepSize,
                 std::numeric_limits< double >::infinity( ), std::numeric_limits< double >::infinity( ) );
 
-    LunarAscentProblem probBenchmarkFirst{ bodyMap, benchmarkIntegratorSettings, benchmarkPropagatorSettings,
-                simulationStartEpoch, specificImpulse };
+    LowThrustProblem probBenchmarkFirst{
+        bodyMap, benchmarkIntegratorSettings, benchmarkPropagatorSettings, specificImpulse, minimumMarsDistance, timeBuffer };
 
     std::cout << "Running first benchmark..." << std::endl;
-    probBenchmarkFirst.fitness( thrustParameters );
+    probBenchmarkFirst.fitness( trajectoryParameters );
 
     // Create integrator settings for 2nd run
-    double secondBenchmarkStepSize = 0.1;
+    double secondBenchmarkStepSize = 7200.0;
     benchmarkIntegratorSettings = std::make_shared< RungeKuttaVariableStepSizeSettings< > >(
                 simulationStartEpoch, secondBenchmarkStepSize, RungeKuttaCoefficients::rungeKutta87DormandPrince,
                 secondBenchmarkStepSize, secondBenchmarkStepSize,
                 std::numeric_limits< double >::infinity( ), std::numeric_limits< double >::infinity( ) );
-    LunarAscentProblem probBenchmarkSecond{ bodyMap, benchmarkIntegratorSettings, benchmarkPropagatorSettings,
-                simulationStartEpoch, specificImpulse };
+    LowThrustProblem probBenchmarkSecond{
+        bodyMap, benchmarkIntegratorSettings, benchmarkPropagatorSettings, specificImpulse, minimumMarsDistance, timeBuffer  };
 
     std::cout << "Running second benchmark..." << std::endl;
-    probBenchmarkSecond.fitness( thrustParameters );
+    probBenchmarkSecond.fitness( trajectoryParameters );
 
     // Retrieve states and dependent variables for both runs
     std::map< double, Eigen::VectorXd > firstBenchmarkStates = probBenchmarkFirst.getLastRunPropagatedStateHistory( );
     std::map< double, Eigen::VectorXd > secondBenchmarkStates = probBenchmarkSecond.getLastRunPropagatedStateHistory( );
+
 
     std::map< double, Eigen::VectorXd > firstBenchmarkDependent = probBenchmarkFirst.getLastRunDependentVariableHistory( );
     std::map< double, Eigen::VectorXd > secondBenchmarkDependent = probBenchmarkSecond.getLastRunDependentVariableHistory( );
@@ -259,47 +192,16 @@ std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorX
     return interpolators;
 }
 
-/*!
- *   This function computes the dynamics of a lunar ascent vehicle, starting at zero velocity on the Moon's surface. The only
- *   accelerations acting on the spacecraft are the Moon's point-mass gravity, and the thrust of the vehicle. Both the
- *   translational dynamics and mass of the vehicle are propagated, using a fixed specific impulse.
- *
- *   The thrust is computed based on a fixed thrust magnitude, and a variable thrust direction. The trust direction is defined
- *   on a set of 5 nodes, spread eavenly in time. At each node, a thrust angle theta is defined, which gives the angle between the
- *   -z and y angles in the ascent vehicle's vertical frame (see Mooij, 1994). Between the nodes, the thrust is linearly
- *   interpolated. If the propagation goes beyond the bounds of the nodes, the boundary value is used.
- *
- *   The propagation is terminated as soon as one of the following conditions is met:
- *
- *   - Altitude > 100 km
- *   - Altitude < 0 km
- *   - Propagation time > 3600 s
- *   - Vehicle mass < 1000 kg
- *
- *   Key outputs:
- *
- *   propagatedStateHistory Numerically propagated Cartesian state
- *   dependentVariableHistory Dependent variables saved during the state propagation of the ascent *
- *
- *   Input parameters:
- *
- *   thrustParameters: Vector contains the following:
- *
- *   - Entry 0: Constant thrust magnitude
- *   - Entry 1: Constant spacing in time between nodes
- *   - Entry 2-6: Thrust angle theta, at five nodes
- */
 int main( )
 {
     // Load Spice kernels.
     spice_interface::loadStandardSpiceKernels( );
 
     // DEFINE PROBLEM INDEPENDENT VARIABLES HERE:
-    std::vector< double > thrustParameters =
-    { 15629.13262285292, 21.50263026822358, -0.03344538412056863, -0.06456210720352829, 0.3943447499535977, 0.5358478897251189,
-      -0.8607350478880107 };
+    std::vector< double > trajectoryParameters =
+    { 1.9567061e+03,  3.8159413e+02,  0, 8.9057206e+03,  2.6738965e+03, -2.9315045e+03, 1.5350545e+03, -3.8783905e+03,  4.3249334e+03 };
 
-    std::string outputPath = tudat_applications::getOutputPath( "LunarAscent" );
+    std::string outputPath = tudat_applications::getOutputPath( "LowThrust" );
     bool generateAndCompareToBenchmark = true;
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -307,25 +209,21 @@ int main( )
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // Define vehicle settings
-    double vehicleMass = 4.7E3;
-    double vehicleDryMass = 2.25E3;
-    double constantSpecificImpulse = 311.0;
-
-    // Define simulation termination settings
-    double maximumDuration = 86400.0;
-    double terminationAltitude = 100.0E3;
-
+    double vehicleMass = 4.0E3;
+    double specificImpulse = 3000.0;
+    double minimumMarsDistance = 5.0E7;
+    double timeBuffer = 30.0 * physical_constants::JULIAN_DAY;
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////     CREATE ENVIRONMENT                   //////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // Set simulation start epoch.
-    double simulationStartEpoch = 0.0;
-
     // Create solar system bodies
     std::vector< std::string > bodiesToCreate;
-    bodiesToCreate.push_back( "Moon" );
+    bodiesToCreate.push_back( "Earth" );
+    bodiesToCreate.push_back( "Mars" );
+    bodiesToCreate.push_back( "Sun" );
+
     std::map< std::string, std::shared_ptr< BodySettings > > bodySettings =
             getDefaultBodySettings( bodiesToCreate );
     NamedBodyMap bodyMap = createBodies( bodySettings );
@@ -339,7 +237,7 @@ int main( )
     bodyMap[ "Vehicle" ]->setConstantBodyMass( vehicleMass );
 
     // Finalize body creation.
-    setGlobalFrameBodyEphemerides( bodyMap, "Moon", "ECLIPJ2000" );
+    setGlobalFrameBodyEphemerides( bodyMap, "SSB", "ECLIPJ2000" );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////             CREATE ACCELERATIONS            ///////////////////////////////////////////////////
@@ -350,27 +248,28 @@ int main( )
 
     // Define acceleration model settings.
     std::map< std::string, std::vector< std::shared_ptr< AccelerationSettings > > > accelerationsOfVehicle;
-    accelerationsOfVehicle[ "Moon" ].push_back( std::make_shared< AccelerationSettings >( central_gravity ) );
+    accelerationsOfVehicle[ "Sun" ].push_back( std::make_shared< AccelerationSettings >( central_gravity ) );
+
     accelerationsOfVehicle[ "Vehicle" ].push_back(
-                getThrustAccelerationModelFromParameters(
-                    thrustParameters, bodyMap, simulationStartEpoch, constantSpecificImpulse ) );
+                getThrustAccelerationSettingsFromParameters( trajectoryParameters, bodyMap ) );
     accelerationSettingsMap[ "Vehicle" ] = accelerationsOfVehicle;
 
     // Define propagator settings variables.
     std::vector< std::string > bodiesToPropagate;
     std::vector< std::string > centralBodies;
     bodiesToPropagate.push_back( "Vehicle" );
-    centralBodies.push_back( "Moon" );
+    centralBodies.push_back( "Sun" );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////   RETRIEVE DATA FOR PROPAGATION SETTINGS            ///////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    double initialPropagationTime = getTrajectoryInitialTime( trajectoryParameters, timeBuffer );
     std::shared_ptr< PropagationTerminationSettings > terminationSettings = getPropagationTerminationSettings(
-                simulationStartEpoch, maximumDuration, terminationAltitude, vehicleDryMass );
+                trajectoryParameters, minimumMarsDistance, 0.0 );
     std::shared_ptr< DependentVariableSaveSettings > dependentVariablesToSave = getDependentVariableSaveSettings();
-    Eigen::Vector6d systemInitialState = getInitialState( simulationStartEpoch, bodyMap );
-
+    Eigen::Vector6d systemInitialState = getHodographicLowThrustStateAtEpoch(
+                trajectoryParameters, bodyMap, initialPropagationTime );
 
     // Create propagator settings for mass (constant for all simulations)
     simulation_setup::SelectedMassRateModelMap massRateModelSettings;
@@ -395,14 +294,15 @@ int main( )
 
         // Define full propagation settings
         std::vector< std::shared_ptr< SingleArcPropagatorSettings< double > > > propagatorSettingsList =
-                { translationalStatePropagatorSettings, massPropagatorSettings };
+        { translationalStatePropagatorSettings, massPropagatorSettings };
         std::shared_ptr< MultiTypePropagatorSettings< double > > benchmarkPropagatorSettings =
                 std::make_shared< MultiTypePropagatorSettings< double > >(
                     propagatorSettingsList, terminationSettings, dependentVariablesToSave );
 
         // Generate benchmark data
-        benchmarkInterpolators = generateBenchmarks( simulationStartEpoch, constantSpecificImpulse, bodyMap, benchmarkPropagatorSettings,
-                                                     thrustParameters, outputPath );
+        benchmarkInterpolators = generateBenchmarks(
+                    initialPropagationTime, specificImpulse, minimumMarsDistance, timeBuffer, bodyMap, benchmarkPropagatorSettings,
+                    trajectoryParameters, outputPath );
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -422,7 +322,7 @@ int main( )
     //!
     //!  For each combination of i,j and k, results are written to directory:
     //!
-    //!     SimulationOutput/LunarAscent/prop_i/int_j/setting_k/
+    //!     SimulationOutput/LowThrust/prop_i/int_j/setting_k/
     //!
     //!  Specifically:
     //!
@@ -446,11 +346,11 @@ int main( )
         std::shared_ptr< TranslationalStatePropagatorSettings< double > > translationalStatePropagatorSettings =
                 std::make_shared< TranslationalStatePropagatorSettings< double > >(
                     centralBodies, accelerationSettingsMap, bodiesToPropagate, systemInitialState,
-                    terminationSettings, propagatorType, dependentVariablesToSave );
+                    terminationSettings, propagatorType );
 
         // Define full propagation settings
         std::vector< std::shared_ptr< SingleArcPropagatorSettings< double > > > propagatorSettingsList =
-                { translationalStatePropagatorSettings, massPropagatorSettings };
+        { translationalStatePropagatorSettings, massPropagatorSettings };
         std::shared_ptr< MultiTypePropagatorSettings< double > > propagatorSettings =
                 std::make_shared< MultiTypePropagatorSettings< double > >(
                     propagatorSettingsList, terminationSettings, dependentVariablesToSave );
@@ -470,14 +370,15 @@ int main( )
                 // Print status
                 std::cout<<"Current run "<<i<<" "<<j<<" "<<k<<std::endl;
                 outputPath = tudat_applications::getOutputPath(
-                            "LunarAscent/prop_" + std::to_string( i ) + "/int_" + std::to_string( j ) + "/setting_" + std::to_string( k ) + "/" );
+                            "LowThrust/prop_" + std::to_string( i ) + "/int_" + std::to_string( j ) + "/setting_" + std::to_string( k ) + "/" );
 
                 // Create integrator settings
-                std::shared_ptr< IntegratorSettings< > > integratorSettings = getIntegratorSettings( i, j, k, simulationStartEpoch );
+                std::shared_ptr< IntegratorSettings< > > integratorSettings = getIntegratorSettings( i, j, k, initialPropagationTime );
 
                 // Construct problem and propagate trajectory using defined settings
-                LunarAscentProblem prob{ bodyMap, integratorSettings, propagatorSettings, simulationStartEpoch, constantSpecificImpulse };
-                prob.fitness( thrustParameters );
+                LowThrustProblem prob{
+                    bodyMap, integratorSettings, propagatorSettings, specificImpulse, minimumMarsDistance, timeBuffer };
+                prob.fitness( trajectoryParameters );
 
                 // Save state and dependent variable results to file
                 std::map< double, Eigen::VectorXd> stateHistory = prob.getLastRunPropagatedStateHistory( );

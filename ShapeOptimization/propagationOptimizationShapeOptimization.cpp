@@ -46,12 +46,23 @@ Eigen::Vector6d getInitialState( double simulationStartEpoch, simulation_setup::
 
 //! Get the propagation termination settings for the state propagation
 /*!
- * This function returns a shared pointer to a PropagationTerminationSettings object, containing
- * altitude (<25 km) and time (>24 hours) termination settings. The settings are such that the propagation terminates once
- * at least one of these conditions has been met
+ * This function returns a shared pointer to a PropagationTerminationSettings object, containing settings termination on:
+ *
+ *      altitude                (<terminationAltitude)
+ *      total propagation time  (>maximumDuration)
+ *
+ * The settings are such that the propagation terminates once at least one of these conditions has been met
+ * \param initialTime Start time of the simulation in seconds.
+ * \param maximumDuration Time in seconds, specifying the maximum time duration before which the
+ * simulation should stop.
+ * \param terminationAltitude Altitude in meters, specifying the maximum altitude before which the
+ * simulation should stop.
  * \return Shared pointer to the PropagationTerminationSettings object.
  */
-std::shared_ptr< PropagationTerminationSettings > getPropagationTerminationSettings()
+std::shared_ptr< PropagationTerminationSettings > getPropagationTerminationSettings(
+        const double initialTime,
+        const double maximumDuration,
+        const double terminationAltitude )
 {
     // Define termination conditions
     std::vector< std::shared_ptr< PropagationTerminationSettings > > terminationSettingsList;
@@ -60,10 +71,10 @@ std::shared_ptr< PropagationTerminationSettings > getPropagationTerminationSetti
     std::shared_ptr< SingleDependentVariableSaveSettings > terminationDependentVariable =
             std::make_shared< SingleDependentVariableSaveSettings >( altitude_dependent_variable, "Capsule", "Earth" );
     terminationSettingsList.push_back(
-                std::make_shared< PropagationDependentVariableTerminationSettings >( terminationDependentVariable, 25.0E3, true ) );
+                std::make_shared< PropagationDependentVariableTerminationSettings >( terminationDependentVariable, terminationAltitude, true ) );
 
     // Add time termination condision
-    terminationSettingsList.push_back( std::make_shared< PropagationTimeTerminationSettings >( 24.0 * 3600.0 ) );
+    terminationSettingsList.push_back( std::make_shared< PropagationTimeTerminationSettings >( initialTime + maximumDuration ) );
 
     return std::make_shared< PropagationHybridTerminationSettings >( terminationSettingsList, true );
 }
@@ -77,18 +88,19 @@ std::shared_ptr< PropagationTerminationSettings > getPropagationTerminationSetti
  *
  * The code, as provided, runs the following:
  *      if j=0,1,2,3: a variable-step-size, multi-stage integrator is used (see multiStageTypes list for specific type),
- *                    with tolerances 10^(12-2*k)
- *      if j=4      : a fixed-step-size RK4 integrator is used, with step-size 2^(k)
+ *                    with tolerances 10^(10-2*k)
+ *      if j=4      : a fixed-step-size RK4 integrator is used, with step-size 10 * 2^(k)
  *
  * CODING NOTE: THIS FUNCTION SHOULD BE EXTENDED TO USE MORE INTEGRATORS FOR ASSIGNMENT 1
  *
+ * \param i Index specifying which kind of propagator is used
  * \param j Index specifying which kind of integrator is used (see above)
  * \param k Index that is used to specify different tolerances for the same integrator (see above)
  * \param simulationStartEpoch The start time of the simulation in seconds.
  * \return Shared pointer to the IntegratorSettings object.
  */
 std::shared_ptr< IntegratorSettings< > > getIntegratorSettings(
-        unsigned int j, unsigned int k, double simulationStartEpoch )
+        unsigned int i, unsigned int j, unsigned int k, double simulationStartEpoch )
 {
     // Define list of multi-stage integrators (for convenience)
     std::vector< RungeKuttaCoefficients::CoefficientSets > multiStageTypes =
@@ -102,7 +114,7 @@ std::shared_ptr< IntegratorSettings< > > getIntegratorSettings(
     {
         // Extract integrator type and tolerance for current run
         RungeKuttaCoefficients::CoefficientSets currentCoefficientSet = multiStageTypes.at( j );
-        double currentTolerance = std::pow( 10.0, ( -12.0 + static_cast< double >( 2*k ) ) );
+        double currentTolerance = std::pow( 10.0, ( -10.0 + static_cast< double >( 2*k ) ) );
 
         // Create integrator settings
         return std::make_shared< RungeKuttaVariableStepSizeSettings< > >(
@@ -115,7 +127,7 @@ std::shared_ptr< IntegratorSettings< > > getIntegratorSettings(
     else
     {
         // Create integrator settings
-        double timeStep = std::pow( 2, k );
+        double timeStep = 10.0 * std::pow( 2, k );
         return std::make_shared< IntegratorSettings< > >( rungeKutta4, simulationStartEpoch, timeStep );
     }
 }
@@ -244,33 +256,27 @@ std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorX
 /*!
  *   This function computes the dynamics of a capsule re-entering the atmosphere of the Earth, starting 120 km above the surface
  *   of the planet, with a velocity of 7.83 km/s. This propagation assumes only point mass gravity and aerodynamic acceleration, providing
- *   a baseline for further investigation. The shape of the capsule can be tweaked by the shape parameters to find the optimum
- *   shape of the vehicle.
+ *   a baseline for further investigation.
  *
  *   The trajectory of the capsule is heavily dependent on the shape of the vehicle, which is determined by the five shape parameters
  *   that form the input for the simulation (see below). These parameters are used to compute the aerodynamic accelerations on the
- *   vehicle (see also [PUBLICATION BY DOMINIC DIRKX, TODO]).
+ *   vehicle (see also Dirkx and Mooij, 2018).
  *
  *   The propagation is terminated as soon as one of the following conditions is met:
  *
  *   - Altitude < 25 km
  *   - Propagation time > 24 hr
  *
- *   Key outputs:
- *
- *   propagatedStateHistory Numerically propagated Cartesian state
- *   dependentVariableHistory Dependent variables saved during the state propagation of the ascent *
- *
  *   Input parameters:
  *
  *   shapeParameters: Vector contains the following:
  *
- *   - Entry 0: TO BE SPECIFIED
- *   - Entry 1: TO BE SPECIFIED
- *   - Entry 2: TO BE SPECIFIED
- *   - Entry 3: TO BE SPECIFIED
- *   - Entry 4: TO BE SPECIFIED
- *   - Entry 5: TO BE SPECIFIED
+ *   - Entry 0:  Nose radius
+ *   - Entry 1:  Middle radius
+ *   - Entry 2:  Rear length
+ *   - Entry 3:  Rear angle
+ *   - Entry 4:  Side radius
+ *   - Entry 5:  Constant Angle of Attack
  */
 int main()
 {
@@ -283,6 +289,10 @@ int main()
 
     std::string outputPath = tudat_applications::getOutputPath( "ShapeOptimization" );
     bool generateAndCompareToBenchmark = true;
+
+    // Define simulation termination settings
+    double maximumDuration = 86400.0;
+    double terminationAltitude = 25.0E3;
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////            CREATE ENVIRONMENT            //////////////////////////////////////////////////////
@@ -303,7 +313,7 @@ int main()
     simulation_setup::NamedBodyMap bodyMap = simulation_setup::createBodies( bodySettings );
 
     //! Create capsule, and add to body map
-    //! CODING NOTE: When making any modifications to the capsule vehicle, do NOT make them in this main function,
+    //! NOTE: When making any modifications to the capsule vehicle, do NOT make them in this main function,
     //! but in the addCapsuleToBodyMap function
     addCapsuleToBodyMap( bodyMap, shapeParameters );
 
@@ -329,7 +339,8 @@ int main()
     ///////////////////////   RETRIEVE DATA FOR PROPAGATION SETTINGS            ///////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    std::shared_ptr< PropagationTerminationSettings > terminationSettings = getPropagationTerminationSettings();
+    std::shared_ptr< PropagationTerminationSettings > terminationSettings = getPropagationTerminationSettings(
+                simulationStartEpoch, maximumDuration, terminationAltitude );
     std::shared_ptr< DependentVariableSaveSettings > dependentVariablesToSave = getDependentVariableSaveSettings();
     Eigen::Vector6d systemInitialState = getInitialState( simulationStartEpoch, bodyMap );
 
@@ -345,8 +356,7 @@ int main()
                     centralBodies, accelerationSettingsMap, bodiesToPropagate, systemInitialState,
                     terminationSettings, cowell, dependentVariablesToSave );
         benchmarkInterpolators = generateBenchmarks(simulationStartEpoch, bodyMap, benchmarkPropagatorSettings,
-                                                    shapeParameters, outputPath);
-
+                                                    shapeParameters, outputPath );
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -410,7 +420,7 @@ int main()
                             "ShapeOptimization/prop_" + std::to_string( i ) + "/int_" + std::to_string( j ) + "/setting_" + std::to_string( k ) + "/" );
 
                 // Create integrator settings
-                std::shared_ptr< IntegratorSettings< > > integratorSettings = getIntegratorSettings( j, k, simulationStartEpoch );
+                std::shared_ptr< IntegratorSettings< > > integratorSettings = getIntegratorSettings( i, j, k, simulationStartEpoch );
 
                 // Construct problem and propagate trajectory using defined settings
                 ShapeOptimizationProblem prob{ bodyMap, integratorSettings, propagatorSettings };

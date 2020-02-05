@@ -191,22 +191,22 @@ endif( )
 include(tudatLinkLibraries)
 
 # Set the source files.
-set(PROPAGATION_OPTIMIZATION_SHAPEOPTIMIZATION_DYNAMICS_SOURCES
-    "${SRCROOT}/shapeOptimization.cpp"
+set(PROPAGATION_OPTIMIZATION_LOWTHRUST_DYNAMICS_SOURCES
+    "${SRCROOT}/lowThrust.cpp"
 )
 
 # Set the header files.
-set(PROPAGATION_OPTIMIZATION_SHAPEOPTIMIZATION_DYNAMICS_HEADERS
-    "${SRCROOT}/shapeOptimization.h"
+set(PROPAGATION_OPTIMIZATION_LOWTHRUST_DYNAMICS_HEADERS
+    "${SRCROOT}/lowThrust.h"
 )
 
 # Add static libraries.
-add_library(tudat_application_library_shape_optimization STATIC ${PROPAGATION_OPTIMIZATION_SHAPEOPTIMIZATION_DYNAMICS_SOURCES} ${PROPAGATION_OPTIMIZATION_SHAPEOPTIMIZATION_DYNAMICS_HEADERS})
-setup_library_target(tudat_application_library_shape_optimization "${SRCROOT}")
+add_library(tudat_application_library_low_thrust STATIC ${PROPAGATION_OPTIMIZATION_LOWTHRUST_DYNAMICS_SOURCES} ${PROPAGATION_OPTIMIZATION_LOWTHRUST_DYNAMICS_HEADERS})
+setup_library_target(tudat_application_library_low_thrust "${SRCROOT}")
 
 # Add helloWorld application.
-add_executable(application_PropagationOptimizationShapeOptimization "${SRCROOT}/propagationOptimizationShapeOptimization.cpp" )
-setup_executable_target(application_PropagationOptimizationShapeOptimization "${SRCROOT}")
-target_link_libraries(application_PropagationOptimizationShapeOptimization tudat_application_library_shape_optimization json_interface_library ${TUDAT_ESTIMATION_LIBRARIES} ${Boost_LIBRARIES} )
+add_executable(application_PropagationOptimizationLowThrust "${SRCROOT}/propagationOptimizationLowThrust.cpp" )
+setup_executable_target(application_PropagationOptimizationLowThrust "${SRCROOT}")
+target_link_libraries(application_PropagationOptimizationLowThrust tudat_application_library_low_thrust tudat_low_thrust_trajectories tudat_shape_based_methods tudat_numerical_quadrature json_interface_library ${TUDAT_ESTIMATION_LIBRARIES} ${Boost_LIBRARIES} )
 
 
