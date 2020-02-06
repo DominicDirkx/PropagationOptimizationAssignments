@@ -64,8 +64,8 @@ void printSemiAnalyticalHodographicShapeToFile(
  *
  * The code, as provided, runs the following:
  *      if j=0,1,2,3: a variable-step-size, multi-stage integrator is used (see multiStageTypes list for specific type),
- *                    with tolerances 10^(12-2*k)
- *      if j=4      : a fixed-step-size RK4 integrator is used, with step-size 2^(k)
+ *                    with tolerances 10^(-10+k)
+ *      if j=4      : a fixed-step-size RK4 integrator is used, with step-size 2 hours*2^(k)
  *
  * CODING NOTE: THIS FUNCTION SHOULD BE EXTENDED TO USE MORE INTEGRATORS FOR ASSIGNMENT 1
  *
@@ -90,7 +90,7 @@ std::shared_ptr< IntegratorSettings< > > getIntegratorSettings(
     {
         // Extract integrator type and tolerance for current run
         RungeKuttaCoefficients::CoefficientSets currentCoefficientSet = multiStageTypes.at( j );
-        double currentTolerance = std::pow( 10.0, ( -12.0 + static_cast< double >( 2*k ) ) );
+        double currentTolerance = std::pow( 10.0, ( -10.0 + static_cast< double >( k ) ) );
 
         // Create integrator settings
         return std::make_shared< RungeKuttaVariableStepSizeSettings< > >(
@@ -103,7 +103,7 @@ std::shared_ptr< IntegratorSettings< > > getIntegratorSettings(
     else
     {
         // Create integrator settings
-        double timeStep = 3600.0 * std::pow( 2, k );
+        double timeStep = 7200.0 * std::pow( 2, k );
         return std::make_shared< IntegratorSettings< > >( rungeKutta4, simulationStartEpoch, timeStep );
     }
 }
@@ -162,7 +162,7 @@ std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorX
         std::vector< double > trajectoryParameters, std::string outputPath )
 {
     // Create integrator settings for 1st run
-    double firstBenchmarkStepSize = 3600.0;
+    double firstBenchmarkStepSize = 86400.0;
     std::shared_ptr< IntegratorSettings< > > benchmarkIntegratorSettings;
     benchmarkIntegratorSettings = std::make_shared< RungeKuttaVariableStepSizeSettings< > >(
                 simulationStartEpoch, firstBenchmarkStepSize, RungeKuttaCoefficients::rungeKutta87DormandPrince,
@@ -176,7 +176,7 @@ std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorX
     probBenchmarkFirst.fitness( trajectoryParameters );
 
     // Create integrator settings for 2nd run
-    double secondBenchmarkStepSize = 7200.0;
+    double secondBenchmarkStepSize = 2.0 * 86400.0;
     benchmarkIntegratorSettings = std::make_shared< RungeKuttaVariableStepSizeSettings< > >(
                 simulationStartEpoch, secondBenchmarkStepSize, RungeKuttaCoefficients::rungeKutta87DormandPrince,
                 secondBenchmarkStepSize, secondBenchmarkStepSize,
@@ -273,8 +273,8 @@ std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorX
  *
  *    The entries of the vector 'trajectoryParameters' contains the following:
  *
- *   - Entry 0: Constant thrust magnitude
- *   - Entry 1: Constant spacing in time between nodes
+ *   - Entry 0: Departure time (from Earth's center-of-mass) in Julian days since J2000
+ *   - Entry 1: Time-of-flight from Earth's center-of-mass to Mars' center-of-mass, in Julian days
  *   - Entry 2-6: Thrust angle theta, at nodes 1-5 (in order)
  *
  *   Details on the outputs written by this file can be found:

@@ -88,7 +88,7 @@ std::shared_ptr< PropagationTerminationSettings > getPropagationTerminationSetti
  *
  * The code, as provided, runs the following:
  *      if j=0,1,2,3: a variable-step-size, multi-stage integrator is used (see multiStageTypes list for specific type),
- *                    with tolerances 10^(10-k)
+ *                    with tolerances 10^(-10+k)
  *      if j=4      : a fixed-step-size RK4 integrator is used, with step-size 10 * 2^(k)
  *
  * CODING NOTE: THIS FUNCTION SHOULD BE EXTENDED TO USE MORE INTEGRATORS FOR ASSIGNMENT 1
@@ -184,7 +184,7 @@ std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorX
         std::vector< double > shapeParameters, std::string outputPath )
 {
     // Create integrator settings for 1st run
-    double firstBenchmarkStepSize = 0.2;
+    double firstBenchmarkStepSize = 2.0;
     std::shared_ptr< IntegratorSettings< > > benchmarkIntegratorSettings;
     benchmarkIntegratorSettings = std::make_shared< RungeKuttaVariableStepSizeSettings< > >(
                 simulationStartEpoch, firstBenchmarkStepSize, RungeKuttaCoefficients::rungeKutta87DormandPrince,
@@ -197,7 +197,7 @@ std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorX
     probBenchmarkFirst.fitness( shapeParameters );
 
     // Create integrator settings for 2nd run
-    double secondBenchmarkStepSize = 0.4;
+    double secondBenchmarkStepSize = 4.0;
     benchmarkIntegratorSettings = std::make_shared< RungeKuttaVariableStepSizeSettings< > >(
                 simulationStartEpoch, secondBenchmarkStepSize, RungeKuttaCoefficients::rungeKutta87DormandPrince,
                 secondBenchmarkStepSize, secondBenchmarkStepSize,
@@ -497,7 +497,6 @@ int main()
                                 stateDifference, "stateDifferenceBenchmark.dat", outputPath );
                     input_output::writeDataMapToTextFile(
                                 depVarDifference, "dependentVariablesDifferenceBenchmark.dat", outputPath );
-
                 }
             }
         }

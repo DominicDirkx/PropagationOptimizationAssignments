@@ -49,8 +49,16 @@ Eigen::Vector6d getInitialState( double simulationStartEpoch, simulation_setup::
 
 }
 
-//! Get the propagation termination settings for the lunar ascent.
+//! Get the propagation termination settings for the state propagation
 /*!
+ * This function returns a shared pointer to a PropagationTerminationSettings object, containing settings termination on:
+ *
+ *      altitude                (>terminationAltitude)
+ *      altitude                (<0)
+ *      total propagation time  (>maximumDuration)
+ *      vehicle mass            (<vehicleDryMass)
+ *
+ * The settings are such that the propagation terminates once at least one of these conditions has been met
  * \param simulationStartEpoch Start time of the simulation in seconds.
  * \param maximumDuration Time in seconds, specifying the maximum time duration before which the
  * simulation should stop.
@@ -90,7 +98,7 @@ std::shared_ptr< PropagationTerminationSettings > getPropagationTerminationSetti
  *
  * The code, as provided, runs the following:
  *      if j=0,1,2,3: a variable-step-size, multi-stage integrator is used (see multiStageTypes list for specific type),
- *                    with tolerances 10^(12-2*k)
+ *                    with tolerances 10^(-10+*k)
  *      if j=4      : a fixed-step-size RK4 integrator is used, with step-size 2^(k)
  *
  * CODING NOTE: THIS FUNCTION SHOULD BE EXTENDED TO USE MORE INTEGRATORS FOR ASSIGNMENT 1
@@ -116,7 +124,7 @@ std::shared_ptr< IntegratorSettings< > > getIntegratorSettings(
     {
         // Extract integrator type and tolerance for current run
         RungeKuttaCoefficients::CoefficientSets currentCoefficientSet = multiStageTypes.at( j );
-        double currentTolerance = std::pow( 10.0, ( -12.0 + static_cast< double >( 2*k ) ) );
+        double currentTolerance = std::pow( 10.0, ( -10.0 + static_cast< double >( k ) ) );
 
         // Create integrator settings
         return std::make_shared< RungeKuttaVariableStepSizeSettings< > >(
@@ -187,7 +195,7 @@ std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorX
         std::vector< double > thrustParameters, std::string outputPath )
 {
     // Create integrator settings for 1st run
-    double firstBenchmarkStepSize = 0.05;
+    double firstBenchmarkStepSize = 1.0;
     std::shared_ptr< IntegratorSettings< > > benchmarkIntegratorSettings;
     benchmarkIntegratorSettings = std::make_shared< RungeKuttaVariableStepSizeSettings< > >(
                 simulationStartEpoch, firstBenchmarkStepSize, RungeKuttaCoefficients::rungeKutta87DormandPrince,
@@ -195,19 +203,19 @@ std::vector< std::shared_ptr< OneDimensionalInterpolator< double, Eigen::VectorX
                 std::numeric_limits< double >::infinity( ), std::numeric_limits< double >::infinity( ) );
 
     LunarAscentProblem probBenchmarkFirst{ bodyMap, benchmarkIntegratorSettings, benchmarkPropagatorSettings,
-                simulationStartEpoch, specificImpulse };
+                specificImpulse };
 
     std::cout << "Running first benchmark..." << std::endl;
     probBenchmarkFirst.fitness( thrustParameters );
 
     // Create integrator settings for 2nd run
-    double secondBenchmarkStepSize = 0.1;
+    double secondBenchmarkStepSize = 2.0;
     benchmarkIntegratorSettings = std::make_shared< RungeKuttaVariableStepSizeSettings< > >(
                 simulationStartEpoch, secondBenchmarkStepSize, RungeKuttaCoefficients::rungeKutta87DormandPrince,
                 secondBenchmarkStepSize, secondBenchmarkStepSize,
                 std::numeric_limits< double >::infinity( ), std::numeric_limits< double >::infinity( ) );
     LunarAscentProblem probBenchmarkSecond{ bodyMap, benchmarkIntegratorSettings, benchmarkPropagatorSettings,
-                simulationStartEpoch, specificImpulse };
+                specificImpulse };
 
     std::cout << "Running second benchmark..." << std::endl;
     probBenchmarkSecond.fitness( thrustParameters );
@@ -388,7 +396,6 @@ int main( )
     std::shared_ptr< DependentVariableSaveSettings > dependentVariablesToSave = getDependentVariableSaveSettings();
     Eigen::Vector6d systemInitialState = getInitialState( simulationStartEpoch, bodyMap );
 
-
     // Create propagator settings for mass (constant for all simulations)
     simulation_setup::SelectedMassRateModelMap massRateModelSettings;
     massRateModelSettings[ "Vehicle" ].push_back( std::make_shared< FromThrustMassModelSettings >( 1 ) );
@@ -493,7 +500,7 @@ int main( )
                 std::shared_ptr< IntegratorSettings< > > integratorSettings = getIntegratorSettings( i, j, k, simulationStartEpoch );
 
                 // Construct problem and propagate trajectory using defined settings
-                LunarAscentProblem prob{ bodyMap, integratorSettings, propagatorSettings, simulationStartEpoch, constantSpecificImpulse };
+                LunarAscentProblem prob{ bodyMap, integratorSettings, propagatorSettings, constantSpecificImpulse };
                 prob.fitness( thrustParameters );
 
                 // Save state and dependent variable results to file

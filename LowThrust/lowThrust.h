@@ -38,10 +38,15 @@ namespace tudat_applications
 namespace PropagationOptimization2020
 {
 
+//! Function to retrieve time-of-flight from trajectory parameters
 double getTrajectoryTimeOfFlight( const std::vector< double >& trajectoryParameters);
 
+//! Function to inital time from trajectory parameters (taking into account a buffer). This buffer is *added* to the
+//! departure time from trajectoryParameters
 double getTrajectoryInitialTime( const std::vector< double >& trajectoryParameters, const double bufferTime = 0.0 );
 
+//! Function to final time from trajectory parameters (taking into account a buffer). This buffer is *subtracted* to the
+//! arrival time from trajectoryParameters
 double getTrajectoryFinalTime( const std::vector< double >& trajectoryParameters, const double bufferTime = 0.0 );
 
 
@@ -61,14 +66,23 @@ std::shared_ptr< PropagationTerminationSettings > getPropagationTerminationSetti
         const double targetDistance,
         const double trajectoryTimeBuffer );
 
+//! Function that creates the object that computes the semi-analytical hodographic shaping method
+/*!
+ *  Function that creates the object that computes the semi-analytical hodographic shaping method
+ *  \param trajectoryParameters Parameters that define the trajectory shape (see comments with main function)
+ *  \param bodyMap List of body objects
+ *  \return Object that computes the hodographic-shape-based trajectory
+ */
 std::shared_ptr< HodographicShaping > createHodographicShapingObject(
         std::vector< double >& trajectoryParameters,
         const simulation_setup::NamedBodyMap bodyMap );
 
+//! Function that generates thrust acceleration model from thrust parameters
 std::shared_ptr< ThrustAccelerationSettings > getThrustAccelerationSettingsFromParameters(
         std::vector< double >& trajectoryParameters,
         const simulation_setup::NamedBodyMap bodyMap );
 
+//! Function to retrieve the semi-analytical calculation of the state along the shape-based trajectory at a given time
 Eigen::Vector6d getHodographicLowThrustStateAtEpoch(
         std::vector< double >& trajectoryParameters,
         const simulation_setup::NamedBodyMap bodyMap,
@@ -78,7 +92,17 @@ class LowThrustProblem
 {
 public:
 
-    // Constructor that we will actually use
+    //! Constructor for the problem class
+    /*!
+     * Constructor for the problem class
+     * \param bodyMap List of body objects
+     * \param integratorSettings Settings for numerical integrator
+     * \param propagatorSettings Settings for propagation of translational state and mass
+     * \param specificImpulse Constant specific impulse of thrust
+     * \param minimumMarsDistance Minimum permissible Mars distance (for propagation termination)
+     * \param timeBuffer Amount of time after shape-based departure time at which to start propagation
+     * \param performPropagation Boolean denoting whether to propagate dynamics numerically
+     */
     LowThrustProblem(
             const simulation_setup::NamedBodyMap bodyMap,
             const std::shared_ptr< IntegratorSettings< > > integratorSettings,
@@ -88,39 +112,38 @@ public:
             double timeBuffer,
             const bool performPropagation = true );
 
-    // Standard constructor
-    LowThrustProblem( )
-    {
-    }
+    //! Default constructor
+    LowThrustProblem( ){ }
 
-    //! Function to retrieve the map with the propagated state history of the last run
+    //! Function to retrieve the map with the propagated state history computed at last call of fitness function
     std::map< double, Eigen::VectorXd > getLastRunPropagatedStateHistory( ) const
     {
         return dynamicsSimulator_->getEquationsOfMotionNumericalSolution( );
     }
 
-    //! Function to retrieve the map with the dependent variable history of the last run
+    //! Function to retrieve the map with the dependent variable history computed at last call of fitness function
     std::map< double, Eigen::VectorXd > getLastRunDependentVariableHistory( ) const
     {
         return dynamicsSimulator_->getDependentVariableHistory( );
     }
 
-    //! Function to retrieve a shared pointer to the dynamics simulator of the last run
+    //! Function to the dynamics simulator, as created during last call of fitness function
     std::shared_ptr< SingleArcDynamicsSimulator< > > getLastRunDynamicsSimulator( )
     {
         return dynamicsSimulator_;
     }
 
-
-    //! Fitness function, called to run the simulation. In this form, it is compatible with
-    //! the Pagmo optimization library.
-    //! \param shapeParameters Decision vector, containing the shape parameters for which
-    //! the propagation needs to be run, to find the corresponding fitness value.
-    //! \return Returns the vector with doubles, describing the fitness belonging
-    //! to the shape parameters passed to the function. Currently returns an empty
-    //! vector.
-    //!
-    std::vector< double > fitness( std::vector< double >& x ) const;
+    //! Function to compute propagate the dynamics of the vehicle defined by the trajectoryParameters
+    /*!
+     *  Function to compute propagate the dynamics of the vehicle defined by the trajectoryParameters. This function updates
+     *  all relevant settings and properties to the new values of these parameters.
+     *
+     *  NOTE: Presently no fitness is computed, this must be modified during the group assignment
+     *
+     *  \param thrustParameters Values of parameters defining the trajectory (see main function)
+     *  \return Fitness (undefined)
+     */
+    std::vector< double > fitness( std::vector< double >& trajectoryParameters ) const;
 
     std::shared_ptr< HodographicShaping > getHodographicShaping( )
     {
@@ -129,7 +152,7 @@ public:
 
 private:
 
-    //! Instance variable holding the body map for the simulation
+    //! Variable holding the body map for the simulation
     mutable simulation_setup::NamedBodyMap bodyMap_;
 
     //! Object holding the integrator settings
@@ -138,21 +161,27 @@ private:
     //! Object holding the propagator settings
     std::shared_ptr< MultiTypePropagatorSettings< double > > propagatorSettings_;
 
-    //! Object holding the translational state propagator settings
+    //! Object holding the translational state propagator settings (part of the propagatorSettings_)
     std::shared_ptr< TranslationalStatePropagatorSettings< double > > translationalStatePropagatorSettings_;
 
+    //! Constant specific impulse of thrust
     double specificImpulse_;
 
+    //! Minimum permissible Mars distance (for propagation termination)
     double minimumMarsDistance_;
 
+    //! Amount of time after shape-based departure time at which to start propagation
     double timeBuffer_;
 
+    //! Boolean denoting whether to propagate dynamics numerically
     bool performPropagation_;
 
+    //! Object that computes the shape-based trajectory semi-analytically
     mutable std::shared_ptr< HodographicShaping > hodographicShaping_;
 
-    //! Object holding the dynamics simulator
+    //! Object holding the dynamics simulator, as created during last call of fitness function
     mutable std::shared_ptr<SingleArcDynamicsSimulator< > > dynamicsSimulator_;
+
 
 };
 
