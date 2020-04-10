@@ -16,6 +16,41 @@ namespace tudat_applications
 {
 namespace PropagationOptimization2020
 {
+
+
+//! Function to retrieve the initial Cartesian state of the vehicle.
+/*!
+ * Function to retrieve the initial Cartesian state of the vehicle. The spherical orbital parameters are
+ * first converted to Cartesian coordinates and subsequently transformed to the global frame of reference.
+ * \param simulationStartEpoch The start time of the simulation in seconds.
+ * \param bodyMap NamedBodyMap containing the bodies in the simulation.
+ * \return Eigen Vector6d containing the system's initial state in Cartesian coordinates.
+ */
+Eigen::Vector6d getInitialState( double simulationStartEpoch, simulation_setup::NamedBodyMap bodyMap,
+                                 double initialFlightPathAngle )
+{
+    // Set spherical elements for Capsule
+    Eigen::Vector6d capsuleSphericalEntryState;
+    capsuleSphericalEntryState( SphericalOrbitalStateElementIndices::radiusIndex ) =
+            spice_interface::getAverageRadius( "Earth" ) + 120.0E3;
+    capsuleSphericalEntryState( SphericalOrbitalStateElementIndices::latitudeIndex ) =
+            unit_conversions::convertDegreesToRadians( 0.0 );
+    capsuleSphericalEntryState( SphericalOrbitalStateElementIndices::longitudeIndex ) =
+            unit_conversions::convertDegreesToRadians( 68.75 );
+    capsuleSphericalEntryState( SphericalOrbitalStateElementIndices::speedIndex ) = 7.83E3;
+    capsuleSphericalEntryState( SphericalOrbitalStateElementIndices::flightPathIndex ) =
+            simulationStartEpoch;
+    capsuleSphericalEntryState( SphericalOrbitalStateElementIndices::headingAngleIndex ) =
+            unit_conversions::convertDegreesToRadians( 34.37 );
+
+    // Set initial inertial Cartesian state and convert to global frame of reference
+    Eigen::Vector6d systemInitialState = convertSphericalOrbitalToCartesianState( capsuleSphericalEntryState );
+    systemInitialState = transformStateToGlobalFrame(
+                systemInitialState, simulationStartEpoch, bodyMap.at( "Earth" )->getRotationalEphemeris( ) );
+
+    return systemInitialState;
+}
+
 /*!
  *  Function that creates an aerodynamic database for a capsule, based on a set of shape parameters
  *  The Capsule shape consists of four separate geometrical components: a sphere segment for the nose, a torus segment for the
@@ -165,6 +200,9 @@ std::vector< double > ShapeOptimizationProblem::fitness( const std::vector< doub
     addCapsuleToBodyMap( bodyMap_, decisionVariables, vehicleDensity_ );
     
     // Reset propagation and guidance models
+    Eigen::Vector6d currentInitialstate = getInitialState(
+                integratorSettings_->initialTime_, bodyMap_, decisionVariables.at( 6 ) );
+    propagatorSettings_->resetInitialStates( currentInitialstate );
     propagatorSettings_->resetIntegratedStateModels( bodyMap_ );
     std::shared_ptr< CapsuleAerodynamicGuidance > capsuleGuidance =
             std::make_shared< CapsuleAerodynamicGuidance >( bodyMap_, decisionVariables.at( 5 ) );

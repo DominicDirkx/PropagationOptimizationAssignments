@@ -33,6 +33,9 @@ namespace tudat_applications
 namespace PropagationOptimization2020
 {
 
+Eigen::Vector6d getInitialState( double simulationStartEpoch, simulation_setup::NamedBodyMap bodyMap,
+                                 double initialFlightPathAngle = unit_conversions::convertDegreesToRadians( -1.5 ) );
+
 //! Function that creates an aerodynamic database for a capsule, based on a set of shape parameters (see .cpp file for details)
 std::shared_ptr< HypersonicLocalInclinationAnalysis > getCapsuleCoefficientInterface(
         const std::shared_ptr< geometric_shapes::Capsule > capsule,

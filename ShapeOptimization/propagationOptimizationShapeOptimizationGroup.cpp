@@ -16,37 +16,6 @@
 
 using namespace tudat_applications::PropagationOptimization2020;
 
-//! Function to retrieve the initial Cartesian state of the vehicle.
-/*!
- * Function to retrieve the initial Cartesian state of the vehicle. The spherical orbital parameters are
- * first converted to Cartesian coordinates and subsequently transformed to the global frame of reference.
- * \param simulationStartEpoch The start time of the simulation in seconds.
- * \param bodyMap NamedBodyMap containing the bodies in the simulation.
- * \return Eigen Vector6d containing the system's initial state in Cartesian coordinates.
- */
-Eigen::Vector6d getInitialState( double simulationStartEpoch, simulation_setup::NamedBodyMap bodyMap )
-{
-    // Set spherical elements for Capsule
-    Eigen::Vector6d capsuleSphericalEntryState;
-    capsuleSphericalEntryState( SphericalOrbitalStateElementIndices::radiusIndex ) =
-            spice_interface::getAverageRadius( "Earth" ) + 120.0E3;
-    capsuleSphericalEntryState( SphericalOrbitalStateElementIndices::latitudeIndex ) =
-            unit_conversions::convertDegreesToRadians( 0.0 );
-    capsuleSphericalEntryState( SphericalOrbitalStateElementIndices::longitudeIndex ) =
-            unit_conversions::convertDegreesToRadians( 68.75 );
-    capsuleSphericalEntryState( SphericalOrbitalStateElementIndices::speedIndex ) = 7.83E3;
-    capsuleSphericalEntryState( SphericalOrbitalStateElementIndices::flightPathIndex ) =
-            unit_conversions::convertDegreesToRadians( -1.5 );
-    capsuleSphericalEntryState( SphericalOrbitalStateElementIndices::headingAngleIndex ) =
-            unit_conversions::convertDegreesToRadians( 34.37 );
-
-    // Set initial inertial Cartesian state and convert to global frame of reference
-    Eigen::Vector6d systemInitialState = convertSphericalOrbitalToCartesianState( capsuleSphericalEntryState );
-    systemInitialState = transformStateToGlobalFrame(
-                systemInitialState, simulationStartEpoch, bodyMap.at( "Earth" )->getRotationalEphemeris( ) );
-
-    return systemInitialState;
-}
 
 //! Get the propagation termination settings for the state propagation
 /*!
@@ -287,7 +256,7 @@ int main()
     // Define decision variable range
     std::vector< std::pair< double, double > > decisionVariableRange =
     { { 3.5, 10.0 }, { 2.0, 3.0 }, { 0.1, 5.0 }, { -55.0 * PI / 180.0, -10.0 * PI / 180.0 }, { 0.01, 0.5 },
-      { 0.0, 30.0 * PI / 180.0 } };
+      { 0.0, 30.0 * PI / 180.0 }, { -5.0 * PI / 180.0, -1.5 * PI / 180.0 } };
 
     // Create random number generators for decision variables
     std::vector< std::function< double( ) > > parameterMonteCarloFunctions;
